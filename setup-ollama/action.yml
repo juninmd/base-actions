@@ -1,0 +1,81 @@
+name: 'Setup Ollama with Model'
+description: 'Instala Ollama, inicia o serviço, configura cache e puxa o modelo'
+
+inputs:
+  model:
+    description: 'Nome do modelo Ollama a usar (ex: gemma3:1b)'
+    required: true
+  ollama-host:
+    description: 'Host do Ollama (padrão: http://localhost:11434)'
+    required: false
+    default: 'http://localhost:11434'
+  wait-timeout:
+    description: 'Timeout máximo para Ollama ficar pronto, em segundos'
+    required: false
+    default: '180'
+  pull-timeout:
+    description: 'Timeout máximo para fazer pull do modelo, em minutos'
+    required: false
+    default: '15'
+  cache-enabled:
+    description: 'Habilitar cache de modelos (true/false)'
+    required: false
+    default: 'true'
+
+outputs:
+  model-cached:
+    description: 'Booleano indicando se modelo veio do cache'
+    value: ${{ steps.cache.outputs.cache-hit }}
+
+runs:
+  using: 'composite'
+
+  steps:
+    - name: Ollama Models Cache
+      if: inputs.cache-enabled == 'true'
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.ollama/models
+        key: ollama-models-${{ inputs.model }}
+
+    - name: Install and Start Ollama
+      shell: bash
+      env:
+        OLLAMA_HOST: ${{ inputs.ollama-host }}
+      run: |
+        echo "📥 Instalando Ollama..."
+        curl -fsSL https://ollama.com/install.sh | sh
+        
+        echo "🚀 Iniciando serviço Ollama em $OLLAMA_HOST..."
+        export OLLAMA_HOST="$OLLAMA_HOST"
+        nohup ollama serve > /tmp/ollama.log 2>&1 &
+        
+        TIMEOUT=${{ inputs.wait-timeout }}
+        echo "⏳ Aguardando Ollama estar pronto (máximo ${TIMEOUT}s)..."
+        if ! timeout $TIMEOUT bash -c 'while ! curl -s "$OLLAMA_HOST/api/tags" > /dev/null 2>&1; do sleep 1; done'; then
+          echo "❌ Timeout: Ollama não respondeu"
+          cat /tmp/ollama.log
+          exit 1
+        fi
+        echo "✅ Ollama está pronto!"
+
+    - name: Pull Ollama Model
+      shell: bash
+      env:
+        OLLAMA_HOST: ${{ inputs.ollama-host }}
+      run: |
+        if [ "${{ steps.cache.outputs.cache-hit }}" != 'true' ]; then
+          TIMEOUT_SECS=$((${{ inputs.pull-timeout }} * 60))
+          echo "📥 Puxando modelo (timeout: ${{ inputs.pull-timeout }}m)..."
+          timeout $TIMEOUT_SECS ollama pull "${{ inputs.model }}" || exit 1
+        else
+          echo "📦 Modelo ${{ inputs.model }} recuperado do cache!"
+        fi
+        
+        echo "📋 Verificando disponibilidade:"
+        if ! ollama list | grep -q "${{ inputs.model }}"; then
+          echo "❌ Erro: Modelo ${{ inputs.model }} não encontrado."
+          exit 1
+        fi
+        echo "✅ Setup concluído com sucesso!"
