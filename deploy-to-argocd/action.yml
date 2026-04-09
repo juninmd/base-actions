@@ -1,0 +1,36 @@
+name: Deploy to ArgoCD
+description: Sync ArgoCD application via API
+
+inputs:
+  app-name:
+    description: ArgoCD application name
+    required: true
+  image-tag:
+    description: Image tag (informational)
+    required: false
+    default: latest
+  charts-token:
+    description: GitHub token (kept for compatibility)
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Sync ArgoCD app
+      shell: bash
+      env:
+        ARGOCD_SERVER: argocd.antonio-code.duckdns.org
+        ARGOCD_AUTH_TOKEN: ${{ env.ARGOCD_AUTH_TOKEN }}
+      run: |
+        if [ -z "$ARGOCD_AUTH_TOKEN" ]; then
+          echo "⚠️  ARGOCD_AUTH_TOKEN não configurado — skipping deploy (ArgoCD auto-sync ativo)"
+          exit 0
+        fi
+        curl -sf -X POST \
+          "https://${ARGOCD_SERVER}/api/v1/applications/${{ inputs.app-name }}/sync" \
+          -H "Authorization: Bearer ${ARGOCD_AUTH_TOKEN}" \
+          -H "Content-Type: application/json" \
+          -d '{"revision":"HEAD","prune":false,"force":true}' \
+          && echo "✅ ArgoCD sync triggered for ${{ inputs.app-name }}" \
+          || echo "⚠️  ArgoCD sync falhou — verifique ARGOCD_AUTH_TOKEN"
