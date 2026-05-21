@@ -131,3 +131,18 @@ runs:
           pip install pytest pytest-asyncio 2>/dev/null || true
           python -m pytest -x --timeout=30 2>/dev/null || echo "No tests found"
         fi
+
+    # ─── Helm / K8s ───────────────────────────────────
+    - name: Install Helm
+      if: hashFiles('**/Chart.yaml') != ''
+      uses: azure/setup-helm@v4
+
+    - name: Lint Helm Charts
+      if: hashFiles('**/Chart.yaml') != ''
+      shell: bash
+      run: |
+        find . -name "Chart.yaml" -exec dirname {} \; | while read chart; do
+          echo "Linting chart: $chart"
+          helm lint "$chart"
+          helm template "$chart" > /dev/null
+        done
