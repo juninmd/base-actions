@@ -1,0 +1,12 @@
+name: Security Scan
+description: Full history secrets scan with Gitleaks
+
+runs:
+  using: composite
+  steps:
+    - name: Gitleaks Scan (Full History)
+      uses: gitleaks/gitleaks-action@v2
+      env:
+        GITHUB_TOKEN: ${{ env.GITHUB_TOKEN }}
+      with:
+        args: --verbose --redact

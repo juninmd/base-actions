@@ -20,7 +20,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Check for committed secrets
+    - name: Check for committed secrets (Basic)
       shell: bash
       run: |
         forbidden=$(git ls-files | grep -E '(^|\/)\.env$|(^|\/)\.env\.(local|production|prod|staging|dev)$|(^|\/)id_rsa$|(^|\/).+\.pem$|(^|\/).+\.key$' || true)
@@ -29,6 +29,13 @@ runs:
           exit 1
         fi
         echo "No committed secrets found."
+
+    - name: Gitleaks Scan (Incremental)
+      uses: gitleaks/gitleaks-action@v2
+      env:
+        GITHUB_TOKEN: ${{ env.GITHUB_TOKEN }}
+      with:
+        args: --verbose --redact --staged
 
     # ─── Node.js ──────────────────────────────────────
     - name: Setup Node.js
