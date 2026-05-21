@@ -1,0 +1,27 @@
+name: Reusable Deployment
+
+on:
+  workflow_call:
+    inputs:
+      app-name:
+        type: string
+        required: true
+      image-tag:
+        type: string
+        required: false
+        default: latest
+    secrets:
+      ARGOCD_AUTH_TOKEN:
+        required: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: juninmd/base-actions/deploy-to-argocd@main
+        env:
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+        with:
+          app-name: ${{ inputs.app-name }}
+          image-tag: ${{ inputs.image-tag }}

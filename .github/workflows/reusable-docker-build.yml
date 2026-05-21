@@ -1,0 +1,21 @@
+name: Reusable Docker Build
+
+on:
+  workflow_call:
+    inputs:
+      image-name:
+        type: string
+        required: true
+    secrets:
+      GH_TOKEN:
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: juninmd/base-actions/docker-build-push@main
+        with:
+          image-name: ${{ inputs.image-name }}
+          github-token: ${{ secrets.GH_TOKEN }}
