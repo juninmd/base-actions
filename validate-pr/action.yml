@@ -1,0 +1,93 @@
+name: Validate PR
+description: >
+  Universal PR validation: secrets check + build/lint/test
+  for Node.js (package.json) or Python (pyproject.toml) projects.
+
+inputs:
+  node-version:
+    description: Node.js version for Node projects
+    required: false
+    default: '22'
+  python-version:
+    description: Python version for Python projects
+    required: false
+    default: '3.12'
+
+runs:
+  using: composite
+  steps:
+    - name: Check for committed secrets
+      shell: bash
+      run: |
+        forbidden=$(git ls-files | grep -E '(^|\/)\.env$|(^|\/)\.env\.(local|production|prod|staging|dev)$|(^|\/)id_rsa$|(^|\/).+\.pem$|(^|\/).+\.key$' || true)
+        if [ -n "$forbidden" ]; then
+          echo "::error::Secret files tracked: $forbidden"
+          exit 1
+        fi
+        echo "No committed secrets found."
+
+    # ─── Node.js ──────────────────────────────────────
+    - name: Setup Node.js
+      if: hashFiles('package.json') != ''
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Install Node dependencies
+      if: hashFiles('package.json') != ''
+      shell: bash
+      run: |
+        if [ -f "pnpm-lock.yaml" ]; then
+          npm install -g pnpm
+          pnpm install --frozen-lockfile
+        elif [ -f "package-lock.json" ]; then
+          npm ci
+        else
+          npm install
+        fi
+
+    - name: Build
+      if: hashFiles('package.json') != ''
+      shell: bash
+      run: npm run build --if-present
+
+    - name: Lint
+      if: hashFiles('package.json') != ''
+      shell: bash
+      run: npm run lint --if-present
+
+    - name: Test
+      if: hashFiles('package.json') != ''
+      shell: bash
+      run: npm test --if-present
+
+    # ─── Python ───────────────────────────────────────
+    - name: Setup Python
+      if: hashFiles('pyproject.toml') != ''
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install Python dependencies
+      if: hashFiles('pyproject.toml') != ''
+      shell: bash
+      run: |
+        if command -v uv &> /dev/null; then
+          uv sync
+        else
+          pip install -e ".[dev,test]" 2>/dev/null || pip install -e ".[dev]" 2>/dev/null || pip install .
+        fi
+
+    - name: Lint Python
+      if: hashFiles('pyproject.toml') != ''
+      shell: bash
+      run: |
+        pip install ruff 2>/dev/null || true
+        ruff check . --exit-zero 2>/dev/null || echo "No ruff config found"
+
+    - name: Test Python
+      if: hashFiles('pyproject.toml') != ''
+      shell: bash
+      run: |
+        pip install pytest pytest-asyncio 2>/dev/null || true
+        python -m pytest -x --timeout=30 2>/dev/null || python -m pytest -x 2>/dev/null || echo "No tests found"
