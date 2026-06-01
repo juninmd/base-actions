@@ -31,7 +31,7 @@ runs:
         echo "No committed secrets found."
 
     - name: Gitleaks Scan (Incremental)
-      uses: gitleaks/gitleaks-action@v2
+      uses: gitleaks/gitleaks-action@v3
       env:
         GITHUB_TOKEN: ${{ env.GITHUB_TOKEN }}
       with:
@@ -40,13 +40,13 @@ runs:
     # ─── Node.js ──────────────────────────────────────
     - name: Setup Node.js
       if: hashFiles('package.json') != ''
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v6
       with:
         node-version: ${{ inputs.node-version }}
 
     - name: Setup pnpm
       if: hashFiles('pnpm-lock.yaml') != ''
-      uses: pnpm/action-setup@v4
+      uses: pnpm/action-setup@v6
       with:
         version: ${{ inputs.pnpm-version }}
 
@@ -95,13 +95,13 @@ runs:
     # ─── Python ───────────────────────────────────────
     - name: Setup uv
       if: hashFiles('pyproject.toml') != '' || hashFiles('uv.lock') != ''
-      uses: astral-sh/setup-uv@v5
+      uses: astral-sh/setup-uv@v8
       with:
         python-version: ${{ inputs.python-version }}
 
     - name: Setup Python
       if: (hashFiles('pyproject.toml') != '' || hashFiles('requirements.txt') != '') && hashFiles('uv.lock') == ''
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: ${{ inputs.python-version }}
 
@@ -142,7 +142,7 @@ runs:
     # ─── Helm / K8s ───────────────────────────────────
     - name: Install Helm
       if: hashFiles('**/Chart.yaml') != ''
-      uses: azure/setup-helm@v4
+      uses: azure/setup-helm@v5
 
     - name: Lint Helm Charts
       if: hashFiles('**/Chart.yaml') != ''

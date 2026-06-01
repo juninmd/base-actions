@@ -5,7 +5,7 @@ runs:
   using: composite
   steps:
     - name: Gitleaks Scan (Full History)
-      uses: gitleaks/gitleaks-action@v2
+      uses: gitleaks/gitleaks-action@v3
       env:
         GITHUB_TOKEN: ${{ env.GITHUB_TOKEN }}
       with:
