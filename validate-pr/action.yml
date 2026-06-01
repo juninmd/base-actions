@@ -95,7 +95,7 @@ runs:
     # ─── Python ───────────────────────────────────────
     - name: Setup uv
       if: hashFiles('pyproject.toml') != '' || hashFiles('uv.lock') != ''
-      uses: astral-sh/setup-uv@v8
+      uses: astral-sh/setup-uv@v8.1.0
       with:
         python-version: ${{ inputs.python-version }}
 
