@@ -8,5 +8,3 @@ runs:
       uses: gitleaks/gitleaks-action@v3
       env:
         GITHUB_TOKEN: ${{ env.GITHUB_TOKEN }}
-      with:
-        args: --verbose --redact
