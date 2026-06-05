@@ -33,7 +33,7 @@ runs:
     - name: Gitleaks Scan (Incremental)
       uses: gitleaks/gitleaks-action@v3
       env:
-        GITHUB_TOKEN: ${{ env.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ github.token }}
 
     # ─── Node.js ──────────────────────────────────────
     - name: Setup Node.js
