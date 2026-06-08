@@ -16,12 +16,11 @@ on:
         required: false
         default: 'latest'
 
-permissions:
-  contents: read
-  pull-requests: read
-
 jobs:
   validate:
+    permissions:
+      contents: read
+      pull-requests: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
