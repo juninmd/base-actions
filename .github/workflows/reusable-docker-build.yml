@@ -6,9 +6,19 @@ on:
       image-name:
         type: string
         required: true
+      charts-path:
+        type: string
+        required: false
+        default: ''
+        description: >-
+          Path inside juninmd/app-charts to pin the freshly-built image tag into.
+          When set (and CHARTS_TOKEN is provided) the new ${github.sha} tag is
+          committed back so ArgoCD auto-sync rolls it out. Empty = build only.
     secrets:
       GH_TOKEN:
         required: true
+      CHARTS_TOKEN:
+        required: false
 
 jobs:
   build:
@@ -19,3 +29,34 @@ jobs:
         with:
           image-name: ${{ inputs.image-name }}
           github-token: ${{ secrets.GH_TOKEN }}
+
+  deploy:
+    needs: build
+    if: ${{ inputs.charts-path != '' }}
+    runs-on: ubuntu-latest
+    env:
+      CHARTS_TOKEN: ${{ secrets.CHARTS_TOKEN }}
+    steps:
+      - name: Guard
+        if: env.CHARTS_TOKEN == ''
+        run: echo "::warning::CHARTS_TOKEN ausente — pulando auto-deploy (ArgoCD segue na tag atual)"
+      - uses: actions/checkout@v4
+        if: env.CHARTS_TOKEN != ''
+        with:
+          repository: juninmd/app-charts
+          token: ${{ secrets.CHARTS_TOKEN }}
+      - name: Pin image to ${{ github.sha }}
+        if: env.CHARTS_TOKEN != ''
+        env:
+          IMAGE: ghcr.io/${{ inputs.image-name }}
+          CHARTS_PATH: ${{ inputs.charts-path }}
+        run: |
+          mapfile -t files < <(grep -rlE "image: *${IMAGE}:" "$CHARTS_PATH")
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::warning::nenhum manifesto referencia ${IMAGE} em ${CHARTS_PATH}"; exit 0
+          fi
+          sed -i -E "s#(${IMAGE}):[^\"[:space:]]+#\1:${GITHUB_SHA}#g" "${files[@]}"
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git diff --quiet || git commit -am "deploy(${CHARTS_PATH}): ${GITHUB_SHA::7} [skip ci]"
+          git push
