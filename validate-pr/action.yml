@@ -35,12 +35,37 @@ runs:
       env:
         GITHUB_TOKEN: ${{ github.token }}
 
+    # ─── Version Detection ─────────────────────────────
+    - name: Detect Runtime Versions
+      shell: bash
+      run: |
+        NODE_VER="${{ inputs.node-version }}"
+        PYTHON_VER="${{ inputs.python-version }}"
+        if [ -f ".nvmrc" ]; then
+          NODE_VER=$(cat .nvmrc | tr -d 'v \n\r')
+        elif [ -f ".node-version" ]; then
+          NODE_VER=$(cat .node-version | tr -d 'v \n\r')
+        elif [ -f "package.json" ]; then
+          if grep -q -E '"typescript":\s*"~2\.' package.json || grep -q -E '"@angular/core":\s*"4\.' package.json || grep -q -E '"@ionic/app-scripts"' package.json; then
+            NODE_VER="10"
+          fi
+        fi
+        if [ -f ".python-version" ]; then
+          PYTHON_VER=$(cat .python-version | tr -d ' \n\r')
+        elif [ -f "requirements.txt" ] && (grep -q -i "realtimetts" requirements.txt || grep -q -i "realtime-tts" requirements.txt); then
+          PYTHON_VER="3.11"
+        fi
+        echo "NODE_VERSION_DETECTED=$NODE_VER" >> $GITHUB_ENV
+        echo "PYTHON_VERSION_DETECTED=$PYTHON_VER" >> $GITHUB_ENV
+        echo "::notice::Detected Node.js version: $NODE_VER"
+        echo "::notice::Detected Python version: $PYTHON_VER"
+
     # ─── Node.js ──────────────────────────────────────
     - name: Setup Node.js
       if: hashFiles('package.json') != ''
       uses: actions/setup-node@v6
       with:
-        node-version: ${{ inputs.node-version }}
+        node-version: ${{ env.NODE_VERSION_DETECTED }}
 
     - name: Setup pnpm
       if: hashFiles('pnpm-lock.yaml') != ''
@@ -95,13 +120,13 @@ runs:
       if: hashFiles('pyproject.toml') != '' || hashFiles('uv.lock') != ''
       uses: astral-sh/setup-uv@v8.1.0
       with:
-        python-version: ${{ inputs.python-version }}
+        python-version: ${{ env.PYTHON_VERSION_DETECTED }}
 
     - name: Setup Python
       if: (hashFiles('pyproject.toml') != '' || hashFiles('requirements.txt') != '') && hashFiles('uv.lock') == ''
       uses: actions/setup-python@v6
       with:
-        python-version: ${{ inputs.python-version }}
+        python-version: ${{ env.PYTHON_VERSION_DETECTED }}
 
     - name: Install Python dependencies
       if: hashFiles('pyproject.toml') != '' || hashFiles('requirements.txt') != ''
