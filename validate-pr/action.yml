@@ -52,7 +52,7 @@ runs:
         fi
         if [ -f ".python-version" ]; then
           PYTHON_VER=$(cat .python-version | tr -d ' \n\r')
-        elif [ -f "requirements.txt" ] && (grep -q -i "realtimetts" requirements.txt || grep -q -i "realtime-tts" requirements.txt); then
+        elif [ -f "requirements.txt" ] && grep -i -E "realtimetts|realtimestt|realtime-tts|coqui" requirements.txt >/dev/null; then
           PYTHON_VER="3.11"
         fi
         echo "NODE_VERSION_DETECTED=$NODE_VER" >> $GITHUB_ENV
