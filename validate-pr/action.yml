@@ -52,6 +52,8 @@ runs:
       run: |
         if [ -f "pnpm-lock.yaml" ]; then
           pnpm install --frozen-lockfile
+        elif [ -f "yarn.lock" ]; then
+          yarn install --frozen-lockfile || yarn install
         elif [ -f "package-lock.json" ]; then
           npm ci --legacy-peer-deps || npm ci
         else
