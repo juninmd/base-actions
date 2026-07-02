@@ -1,0 +1,57 @@
+name: 'Docker Build & Push (GHCR)'
+description: 'Constrói e envia imagem Docker para o GitHub Container Registry (GHCR)'
+
+inputs:
+  image-name:
+    description: 'Nome da imagem (ex: juninmd/shorts). Se omitido, usa o nome do repositório.'
+    required: false
+  dockerfile-path:
+    description: 'Caminho para o Dockerfile'
+    required: false
+    default: './Dockerfile'
+  push:
+    description: 'Se deve fazer o push da imagem'
+    required: false
+    default: 'true'
+  github-token:
+    description: 'GITHUB_TOKEN para autenticação no GHCR'
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log into registry ghcr.io
+      if: ${{ inputs.push == 'true' }}
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ inputs.github-token }}
+
+    - name: Extract Docker metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ghcr.io/${{ inputs.image-name || github.repository }}
+        tags: |
+          type=ref,event=branch
+          type=sha,prefix=
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ${{ inputs.dockerfile-path }}
+        push: ${{ inputs.push }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max

@@ -1,0 +1,34 @@
+name: 'Quality Check'
+description: 'Roda Lint, Testes e valida cobertura de código'
+
+inputs:
+  node-version:
+    description: 'Versão do Node.js'
+    required: false
+    default: '22'
+  run-lint:
+    description: 'Se deve rodar o lint'
+    required: false
+    default: 'true'
+  run-test:
+    description: 'Se deve rodar os testes'
+    required: false
+    default: 'true'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Node & PNPM
+      uses: ./setup-node-pnpm
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Run Lint
+      if: ${{ inputs.run-lint == 'true' }}
+      shell: bash
+      run: pnpm lint
+
+    - name: Run Tests
+      if: ${{ inputs.run-test == 'true' }}
+      shell: bash
+      run: pnpm test

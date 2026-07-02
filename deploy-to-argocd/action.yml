@@ -1,0 +1,41 @@
+name: 'Deploy to ArgoCD'
+description: 'Atualiza a tag da imagem no repositório app-charts'
+
+inputs:
+  app-name:
+    description: 'Nome da aplicação (ex: minha-api)'
+    required: true
+  image-tag:
+    description: 'A nova tag da imagem (ex: sha do commit)'
+    required: true
+  charts-repo:
+    description: 'URL do repositório de charts'
+    required: false
+    default: 'https://github.com/juninmd/app-charts'
+  charts-token:
+    description: 'Token com acesso de escrita ao repositório de charts'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Clone app-charts
+      shell: bash
+      run: |
+        git clone https://${{ inputs.charts-token }}@github.com/juninmd/app-charts.git temp-charts
+
+    - name: Update image tag
+      shell: bash
+      run: |
+        # Presumindo que o chart está em charts/${app-name}/values.yaml
+        cd temp-charts
+        sed -i "s/tag:.*/tag: \"${{ inputs.image-tag }}\"/g" charts/${{ inputs.app-name }}/values.yaml
+        
+        # Configurando o git para o commit
+        git config user.name "GitHub Actions"
+        git config user.email "actions@github.com"
+        
+        # Commmit e Push
+        git add .
+        git commit -m "chore: update ${{ inputs.app-name }} to ${{ inputs.image-tag }}"
+        git push
