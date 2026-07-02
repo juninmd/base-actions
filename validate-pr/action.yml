@@ -70,6 +70,8 @@ runs:
     - name: Setup pnpm
       if: hashFiles('pnpm-lock.yaml') != ''
       uses: pnpm/action-setup@v6
+      with:
+        version: ${{ inputs.pnpm-version }}
 
     - name: Install Node dependencies
       if: hashFiles('package.json') != ''
