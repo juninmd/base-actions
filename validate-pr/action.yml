@@ -89,6 +89,10 @@ runs:
       if: hashFiles('package.json') != ''
       shell: bash
       run: |
+        NODE_MAJOR=$(node -v | cut -d'.' -f1 | tr -d 'v' || echo "22")
+        if [ "$NODE_MAJOR" -ge 17 ] 2>/dev/null; then
+          export NODE_OPTIONS="--openssl-legacy-provider"
+        fi
         if [ -f "pnpm-lock.yaml" ]; then
           pnpm run build --if-present
         else
@@ -99,6 +103,10 @@ runs:
       if: hashFiles('package.json') != ''
       shell: bash
       run: |
+        NODE_MAJOR=$(node -v | cut -d'.' -f1 | tr -d 'v' || echo "22")
+        if [ "$NODE_MAJOR" -ge 17 ] 2>/dev/null; then
+          export NODE_OPTIONS="--openssl-legacy-provider"
+        fi
         if [ -f "pnpm-lock.yaml" ]; then
           pnpm run lint --if-present
         else
@@ -109,6 +117,10 @@ runs:
       if: hashFiles('package.json') != ''
       shell: bash
       run: |
+        NODE_MAJOR=$(node -v | cut -d'.' -f1 | tr -d 'v' || echo "22")
+        if [ "$NODE_MAJOR" -ge 17 ] 2>/dev/null; then
+          export NODE_OPTIONS="--openssl-legacy-provider"
+        fi
         if [ -f "pnpm-lock.yaml" ]; then
           pnpm test --if-present
         else
