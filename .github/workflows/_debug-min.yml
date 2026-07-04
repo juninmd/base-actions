@@ -18,6 +18,4 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - uses: juninmd/base-actions/validate-pr@main
-        with:
-          node-version: ${{ inputs.node-version }}
+      - run: echo hi
