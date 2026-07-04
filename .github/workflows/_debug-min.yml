@@ -1,0 +1,15 @@
+name: Debug Min
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        type: string
+        required: false
+        default: '22'
+
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hi
