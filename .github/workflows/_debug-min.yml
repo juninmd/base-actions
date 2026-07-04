@@ -10,6 +10,14 @@ on:
 
 jobs:
   noop:
+    permissions:
+      contents: read
+      pull-requests: read
     runs-on: ubuntu-latest
     steps:
-      - run: echo hi
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: juninmd/base-actions/validate-pr@main
+        with:
+          node-version: ${{ inputs.node-version }}
