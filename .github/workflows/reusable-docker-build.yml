@@ -24,7 +24,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: juninmd/base-actions/docker-build-push@main
         with:
           image-name: ${{ inputs.image-name }}
@@ -40,7 +40,7 @@ jobs:
       - name: Guard
         if: env.CHARTS_TOKEN == ''
         run: echo "::warning::CHARTS_TOKEN ausente — pulando auto-deploy (ArgoCD segue na tag atual)"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: env.CHARTS_TOKEN != ''
         with:
           repository: juninmd/app-charts
