@@ -67,8 +67,19 @@ runs:
       with:
         node-version: ${{ env.NODE_VERSION_DETECTED }}
 
-    - name: Setup pnpm
+    - name: Check packageManager field
+      id: check-pm
       if: hashFiles('pnpm-lock.yaml') != ''
+      shell: bash
+      run: |
+        if grep -q '"packageManager"' package.json 2>/dev/null; then
+          echo "has-package-manager=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "has-package-manager=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Setup pnpm (legacy, via action)
+      if: hashFiles('pnpm-lock.yaml') != '' && steps.check-pm.outputs.has-package-manager != 'true'
       uses: pnpm/action-setup@v6
       with:
         version: ${{ inputs.pnpm-version }}
