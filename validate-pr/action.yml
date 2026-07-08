@@ -119,7 +119,7 @@ runs:
           export NODE_OPTIONS="--openssl-legacy-provider"
         fi
         if [ -f "pnpm-lock.yaml" ]; then
-          pnpm run build --if-present
+          pnpm run --if-present build
         else
           npm run build --if-present
         fi
@@ -133,7 +133,7 @@ runs:
           export NODE_OPTIONS="--openssl-legacy-provider"
         fi
         if [ -f "pnpm-lock.yaml" ]; then
-          pnpm run lint --if-present
+          pnpm run --if-present lint
         else
           npm run lint --if-present
         fi
@@ -147,7 +147,7 @@ runs:
           export NODE_OPTIONS="--openssl-legacy-provider"
         fi
         if [ -f "pnpm-lock.yaml" ]; then
-          pnpm test --if-present
+          pnpm run --if-present test
         else
           npm test --if-present
         fi
