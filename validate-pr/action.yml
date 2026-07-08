@@ -84,6 +84,14 @@ runs:
       with:
         version: ${{ inputs.pnpm-version }}
 
+    # Quando o package.json tem "packageManager", o pnpm/action-setup é pulado
+    # (para evitar conflito de versão). Nesse caso o pnpm vem do corepack, que
+    # precisa ser habilitado explicitamente — senão `pnpm` não existe (exit 127).
+    - name: Enable corepack (packageManager field)
+      if: hashFiles('pnpm-lock.yaml') != '' && steps.check-pm.outputs.has-package-manager == 'true'
+      shell: bash
+      run: corepack enable
+
     - name: Install Node dependencies
       if: hashFiles('package.json') != ''
       shell: bash
