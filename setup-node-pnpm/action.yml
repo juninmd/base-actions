@@ -18,10 +18,28 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Install PNPM
+    # Se o package.json tem "packageManager", o pnpm/action-setup conflita
+    # ("Multiple versions of pnpm specified"); nesse caso o pnpm vem do corepack.
+    - name: Detect packageManager field
+      id: pm
+      shell: bash
+      run: |
+        if grep -q '"packageManager"' package.json 2>/dev/null; then
+          echo "has=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "has=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Install PNPM (action)
+      if: steps.pm.outputs.has != 'true'
       uses: pnpm/action-setup@v6
       with:
         version: ${{ inputs.pnpm-version }}
+
+    - name: Enable corepack (packageManager field)
+      if: steps.pm.outputs.has == 'true'
+      shell: bash
+      run: corepack enable
 
     - name: Setup Node.js
       uses: actions/setup-node@v6
