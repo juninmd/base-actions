@@ -101,7 +101,8 @@ runs:
           export NODE_OPTIONS="--openssl-legacy-provider"
         fi
         if [ -f "pnpm-lock.yaml" ]; then
-          pnpm install --frozen-lockfile || { echo "::warning::pnpm-lock.yaml desatualizado — fallback para install não-frozen"; pnpm install --no-frozen-lockfile; }
+          # strictDepBuilds=false: build scripts não-revisados viram warning (não são executados), sem travar o gate (pnpm 10.3+)
+          pnpm install --frozen-lockfile --config.strictDepBuilds=false || { echo "::warning::pnpm-lock.yaml desatualizado — fallback para install não-frozen"; pnpm install --no-frozen-lockfile --config.strictDepBuilds=false; }
         elif [ -f "yarn.lock" ]; then
           yarn install --frozen-lockfile || yarn install
         elif [ -f "package-lock.json" ]; then
