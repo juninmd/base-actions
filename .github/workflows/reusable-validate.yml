@@ -27,7 +27,3 @@ jobs:
         with:
           fetch-depth: 0
       - uses: juninmd/base-actions/validate-pr@main
-        with:
-          node-version: ${{ inputs.node-version }}
-          python-version: ${{ inputs.python-version }}
-          pnpm-version: ${{ inputs.pnpm-version }}
