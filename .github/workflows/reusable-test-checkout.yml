@@ -1,0 +1,8 @@
+name: Test Checkout v7
+on:
+  workflow_call:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
