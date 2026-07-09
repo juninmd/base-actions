@@ -1,0 +1,16 @@
+name: Test With Block
+on:
+  workflow_call:
+    inputs:
+      test-input:
+        type: string
+        required: false
+        default: 'hello'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: echo "input is ${{ inputs.test-input }}"
