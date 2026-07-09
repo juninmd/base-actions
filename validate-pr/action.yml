@@ -34,6 +34,7 @@ runs:
       uses: gitleaks/gitleaks-action@v3
       env:
         GITHUB_TOKEN: ${{ github.token }}
+        GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
 
     # ─── Version Detection ─────────────────────────────
     - name: Detect Runtime Versions
