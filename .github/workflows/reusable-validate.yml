@@ -1,10 +1,8 @@
-name: Reusable PR Validation
-
+name: Test Validate PR Action
 on:
   workflow_call:
-
 jobs:
-  validate:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
