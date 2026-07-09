@@ -1,0 +1,10 @@
+name: Test With Permissions
+on:
+  workflow_call:
+jobs:
+  test:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "works with permissions"
