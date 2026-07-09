@@ -1,0 +1,9 @@
+name: Test Validate PR Action
+on:
+  workflow_call:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: juninmd/base-actions/validate-pr@main
