@@ -46,7 +46,7 @@ jobs:
   run-ai:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       # 1. Setup do Ollama com modelo Gemma 3
       - uses: juninmd/base-actions/setup-ollama@main
