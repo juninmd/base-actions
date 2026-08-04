@@ -109,5 +109,38 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
+## 🔐 Ruleset de secrets (`gitleaks.toml`)
+
+`validate-pr` e `security-scan` usam o ruleset central deste repositório, que estende o
+padrão do Gitleaks com regras nascidas de vazamentos reais encontrados nos repositórios:
+
+| regra | pega |
+|---|---|
+| `juninmd-hardcoded-password` | `password: 'algo'` literal em código ou config |
+| `juninmd-oracle-connect-string` | `connectString: 'host:porta/SID'` |
+| `juninmd-db-uri-credentials` | `mysql://user:senha@host`, `postgres://`, `mongodb://`, `amqp://`… |
+| `juninmd-internal-hostname` | host de rede interna (`*.intranet`, `*.corp`, `*.internal`, `*.lan`) |
+| `juninmd-aws-rds-endpoint` | endpoint de RDS / Redshift / ElastiCache |
+| `juninmd-authorization-header` | `Bearer …` / `Basic …` hardcoded |
+
+O ruleset padrão do Gitleaks não pegava nenhum desses casos.
+
+### Sobrepor num repositório específico
+
+Um `gitleaks.toml` (ou `.gitleaks.toml`) na raiz do repositório tem precedência — a action
+detecta e não copia o central. Para aceitar um achado pontual, use `.gitleaksignore` com o
+fingerprint, que é o mecanismo nativo do Gitleaks.
+
+### Mexer nas regras
+
+`testdata/` é o contrato: `leaky/` tem uma amostra por regra e **precisa** ser detectado,
+`clean/` tem os placeholders que **não** podem acusar. O workflow `test-gitleaks-config.yml`
+roda `testdata/assert.py` e falha se qualquer um dos dois lados quebrar. Regra nova só entra
+com caso de teste junto.
+
+```bash
+python testdata/assert.py gitleaks   # roda igual na máquina
+```
+
 ---
 Built with ❤️ by [juninmd](https://github.com/juninmd)
