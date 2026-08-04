@@ -1,0 +1,19 @@
+# O corpus em testdata/leaky/ existe justamente para ser detectado — é ele que
+# prova, em CI, que cada regra de gitleaks.toml funciona. Os segredos são todos
+# inventados; só o formato é real.
+#
+# Supressão por fingerprint, e não por allowlist de path, porque allowlist casa
+# com o caminho completo e silenciaria também a suíte de teste (testdata/assert.py).
+#
+# Ao mexer no corpus, os números de linha mudam: regenere com
+#   gitleaks detect --no-git --source . --config gitleaks.toml \
+#     --report-format json --report-path /tmp/r.json --exit-code 0
+#   jq -r '.[].Fingerprint' /tmp/r.json | sort -u
+
+testdata/leaky/config.js:juninmd-authorization-header:28
+testdata/leaky/config.js:juninmd-aws-rds-endpoint:9
+testdata/leaky/config.js:juninmd-db-uri-credentials:25
+testdata/leaky/config.js:juninmd-hardcoded-password:11
+testdata/leaky/config.js:juninmd-hardcoded-password:21
+testdata/leaky/config.js:juninmd-internal-hostname:18
+testdata/leaky/config.js:juninmd-oracle-connect-string:18
