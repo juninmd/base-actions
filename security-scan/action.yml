@@ -4,8 +4,33 @@ description: Full history secrets scan with Gitleaks
 runs:
   using: composite
   steps:
+    # O gitleaks-action so enxerga config dentro do workspace do repo escaneado,
+    # entao a config central e copiada pra ca. Config propria do repo sempre vence.
+    - name: Resolve Gitleaks config
+      id: cfg
+      shell: bash
+      run: |
+        if [ -f .gitleaks.toml ]; then
+          CFG=.gitleaks.toml
+          echo "::notice::Usando .gitleaks.toml do proprio repositorio"
+        elif [ -f gitleaks.toml ]; then
+          CFG=gitleaks.toml
+          echo "::notice::Usando gitleaks.toml do proprio repositorio"
+        else
+          cp "${{ github.action_path }}/../gitleaks.toml" .gitleaks-base.toml
+          CFG=.gitleaks-base.toml
+          echo "::notice::Usando o ruleset central do base-actions"
+        fi
+        echo "path=$CFG" >> "$GITHUB_OUTPUT"
+
     - name: Gitleaks Scan (Full History)
       uses: gitleaks/gitleaks-action@v3
       env:
         GITHUB_TOKEN: ${{ github.token }}
         GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
+        GITLEAKS_CONFIG: ${{ steps.cfg.outputs.path }}
+
+    - name: Remove config temporaria
+      if: always()
+      shell: bash
+      run: rm -f .gitleaks-base.toml
