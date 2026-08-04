@@ -1,0 +1,52 @@
+name: Release & Tagging
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        description: 'Target branch for tagging'
+        required: false
+        type: string
+        default: 'main'
+      generate-release:
+        description: 'Whether to generate a GitHub release'
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      GH_TOKEN:
+        description: 'Personal Access Token'
+        required: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    if: github.ref == format('refs/heads/{0}', inputs.branch)
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Git Config
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Tag generation
+        id: tagger
+        run: |
+          # Simple tag generation based on date and commit hash
+          TAG_NAME="v$(date +'%Y.%m.%d')-$(git rev-parse --short HEAD)"
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          git tag $TAG_NAME
+          git push origin $TAG_NAME
+
+      - name: Create Release
+        if: ${{ inputs.generate-release }}
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.tagger.outputs.tag_name }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}

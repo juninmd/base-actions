@@ -7,6 +7,9 @@ Central repository for standardizing GitHub Actions workflows across all **junin
 - **Validate PR**: Tech-agnostic validation (Node/pnpm/npm, Python/uv/pip). Checks for secrets, builds, lints, and tests.
 - **Docker Build & Push**: Standardized build with cache and push to GHCR.
 - **ArgoCD Deploy**: Automated sync for ArgoCD applications.
+- **Commit Lint**: Conventional Commits validation for PRs and pushes.
+- **Node CI**: pnpm typecheck, build and lint.
+- **Release & Tagging**: Date-based tag generation plus GitHub release notes.
 
 ## 🛠 Usage
 
@@ -60,6 +63,50 @@ jobs:
       app-name: 'my-app'
     secrets:
       ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+```
+
+### 4. Commit Lint
+Add this to `.github/workflows/commit-lint.yml`:
+
+```yaml
+name: Commit Lint
+on: [pull_request]
+
+jobs:
+  lint:
+    uses: juninmd/base-actions/.github/workflows/reusable-commit-lint.yml@main
+```
+
+### 5. Node CI
+Add this to `.github/workflows/ci.yml`:
+
+```yaml
+name: CI
+on: [push, pull_request]
+
+jobs:
+  build:
+    uses: juninmd/base-actions/.github/workflows/reusable-node-ci.yml@main
+    with:
+      node-version: '22' # Optional
+```
+
+### 6. Release & Tagging
+Add this to `.github/workflows/release.yml`:
+
+```yaml
+name: Release
+on:
+  push:
+    branches: [main]
+
+jobs:
+  release:
+    uses: juninmd/base-actions/.github/workflows/reusable-release.yml@main
+    with:
+      branch: 'main'
+    secrets:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 ---
