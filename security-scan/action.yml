@@ -1,36 +1,135 @@
 name: Security Scan
-description: Full history secrets scan with Gitleaks
+description: Varredura de segredos no historico completo com Gitleaks
+
+inputs:
+  gitleaks-version:
+    description: Versao fixada do Gitleaks. Mesma usada em test-gitleaks-config.yml.
+    required: false
+    default: '8.30.1'
+  fail-on-findings:
+    description: Falha o job quando encontrar segredo. Desligue apenas para inventario.
+    required: false
+    default: 'true'
 
 runs:
   using: composite
   steps:
-    # O gitleaks-action so enxerga config dentro do workspace do repo escaneado,
-    # entao a config central e copiada pra ca. Config propria do repo sempre vence.
-    - name: Resolve Gitleaks config
+    # O binario e baixado uma vez por versao e reaproveitado nas execucoes
+    # seguintes, evitando um download de release a cada job.
+    - name: Restaurar Gitleaks do cache
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/gitleaks-bin
+        key: gitleaks-${{ runner.os }}-${{ runner.arch }}-${{ inputs.gitleaks-version }}
+
+    - name: Instalar Gitleaks
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        VERSION: ${{ inputs.gitleaks-version }}
+        ARCH: ${{ runner.arch }}
+      run: |
+        set -euo pipefail
+        case "$ARCH" in
+          X64) arch=x64 ;;
+          ARM64) arch=arm64 ;;
+          *) echo "::error::Arquitetura nao suportada pelo Gitleaks: $ARCH"; exit 1 ;;
+        esac
+
+        dest="$RUNNER_TEMP/gitleaks-bin"
+        mkdir -p "$dest"
+        work="$(mktemp -d)"
+        base="https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}"
+        tarball="gitleaks_${VERSION}_linux_${arch}.tar.gz"
+
+        curl -sSfL --retry 3 --retry-delay 2 -o "$work/$tarball" "$base/$tarball"
+        curl -sSfL --retry 3 --retry-delay 2 -o "$work/checksums.txt" "$base/checksums.txt"
+
+        # Ferramenta de seguranca sem verificacao de integridade vira vetor de
+        # supply chain: confere o release contra o checksum publicado.
+        ( cd "$work" && grep " $tarball\$" checksums.txt | sha256sum -c - )
+
+        tar -xzf "$work/$tarball" -C "$dest" gitleaks
+        chmod +x "$dest/gitleaks"
+        rm -rf "$work"
+
+    - name: Publicar Gitleaks no PATH
+      shell: bash
+      run: echo "$RUNNER_TEMP/gitleaks-bin" >> "$GITHUB_PATH"
+
+    # O Gitleaks so enxerga config dentro do workspace do repo escaneado, entao a
+    # config central e copiada pra ca. Config propria do repo sempre vence.
+    - name: Resolver config do Gitleaks
       id: cfg
       shell: bash
       run: |
+        set -euo pipefail
         if [ -f .gitleaks.toml ]; then
-          CFG=.gitleaks.toml
+          cfg=.gitleaks.toml
           echo "::notice::Usando .gitleaks.toml do proprio repositorio"
         elif [ -f gitleaks.toml ]; then
-          CFG=gitleaks.toml
+          cfg=gitleaks.toml
           echo "::notice::Usando gitleaks.toml do proprio repositorio"
         else
           cp "${{ github.action_path }}/../gitleaks.toml" .gitleaks-base.toml
-          CFG=.gitleaks-base.toml
+          cfg=.gitleaks-base.toml
           echo "::notice::Usando o ruleset central do base-actions"
         fi
-        echo "path=$CFG" >> "$GITHUB_OUTPUT"
+        echo "path=$cfg" >> "$GITHUB_OUTPUT"
 
-    - name: Gitleaks Scan (Full History)
-      uses: gitleaks/gitleaks-action@v3
+    - name: Varrer historico completo
+      id: scan
+      shell: bash
       env:
-        GITHUB_TOKEN: ${{ github.token }}
-        GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
-        GITLEAKS_CONFIG: ${{ steps.cfg.outputs.path }}
+        CONFIG: ${{ steps.cfg.outputs.path }}
+        FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+      run: |
+        set -uo pipefail
+        gitleaks version
+        report="$RUNNER_TEMP/gitleaks-report.json"
 
-    - name: Remove config temporaria
+        # --redact impede que o segredo apareca no log publico do job.
+        # --exit-code 0 devolve o controle da falha para ca, permitindo resumir
+        # os achados antes de encerrar.
+        gitleaks detect \
+          --source . \
+          --config "$CONFIG" \
+          --report-format json \
+          --report-path "$report" \
+          --redact \
+          --no-banner \
+          --exit-code 0
+        status=$?
+        if [ $status -ne 0 ]; then
+          echo "::error::Gitleaks falhou ao executar (codigo $status)"
+          exit $status
+        fi
+
+        [ -s "$report" ] || echo '[]' > "$report"
+        total=$(jq 'length' "$report")
+        echo "total=$total" >> "$GITHUB_OUTPUT"
+
+        if [ "$total" -eq 0 ]; then
+          echo "### Gitleaks: nenhum segredo encontrado" >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+        fi
+
+        # O resumo diz onde esta o vazamento, nunca o valor.
+        {
+          echo "### Gitleaks: $total ocorrencia(s)"
+          echo ""
+          echo "| Regra | Arquivo | Linha | Commit |"
+          echo "| --- | --- | --- | --- |"
+          jq -r '.[] | "| \(.RuleID) | \(.File) | \(.StartLine) | \((.Commit // "")[0:8]) |"' "$report"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        if [ "$FAIL_ON_FINDINGS" = "true" ]; then
+          echo "::error::Gitleaks encontrou $total ocorrencia(s). Detalhes no resumo do job."
+          exit 1
+        fi
+
+    - name: Remover config temporaria
       if: always()
       shell: bash
       run: rm -f .gitleaks-base.toml

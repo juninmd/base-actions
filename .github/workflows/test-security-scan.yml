@@ -1,0 +1,74 @@
+name: Test Security Scan Action
+
+# Roda a action do proprio branch (./security-scan), nao a de @main, para que a
+# alteracao seja provada antes de virar main. O repositorio tem corpus vazado
+# proposital em testdata/leaky/, suprimido por fingerprint no .gitleaksignore:
+# se a supressao ou a action quebrarem, este teste fica vermelho.
+on:
+  push:
+    paths:
+      - 'security-scan/**'
+      - 'gitleaks.toml'
+      - '.gitleaksignore'
+      - '.github/workflows/reusable-security-scan.yml'
+      - '.github/workflows/test-security-scan.yml'
+  pull_request:
+    paths:
+      - 'security-scan/**'
+      - 'gitleaks.toml'
+      - '.gitleaksignore'
+      - '.github/workflows/reusable-security-scan.yml'
+      - '.github/workflows/test-security-scan.yml'
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  scan-self:
+    name: Varre o proprio repositorio
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./security-scan
+
+  detects-planted-secret:
+    name: Prova que um segredo novo e barrado
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Sem esta prova, um scan quebrado passaria despercebido: nao encontrar
+      # nada pareceria sucesso.
+      - name: Plantar segredo nao suprimido
+        run: |
+          set -euo pipefail
+          mkdir -p .security-scan-probe
+          printf 'password: "%s"\n' "qX7@vLm2#Zt9!Rb4_Pw6kNc8" > .security-scan-probe/config.yml
+          git -c user.email=ci@example.com -c user.name=ci add -f .security-scan-probe/config.yml
+          git -c user.email=ci@example.com -c user.name=ci commit -q -m 'test: segredo plantado para o teste do scan'
+
+      - id: probe
+        uses: ./security-scan
+        continue-on-error: true
+        with:
+          fail-on-findings: 'true'
+
+      - name: Exigir que o scan tenha falhado
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.probe.outcome }}" != "failure" ]; then
+            echo "::error::O scan passou com um segredo plantado no historico. A varredura nao esta funcionando."
+            exit 1
+          fi
+          echo "Scan barrou o segredo plantado, como esperado."
