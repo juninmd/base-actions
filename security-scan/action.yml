@@ -28,27 +28,35 @@ runs:
         path: ${{ runner.temp }}/gitleaks-bin
         key: gitleaks-${{ runner.os }}-${{ runner.arch }}-${{ inputs.gitleaks-version }}
 
+    # Roda sempre e decide pelo binario, nao pelo cache-hit: se uma execucao
+    # anterior falhar no meio do download, o cache guarda um diretorio vazio e
+    # confiar no cache-hit deixaria todas as execucoes seguintes sem gitleaks.
     - name: Instalar Gitleaks
-      if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
       env:
         VERSION: ${{ inputs.gitleaks-version }}
         ARCH: ${{ runner.arch }}
       run: |
         set -euo pipefail
+        dest="$RUNNER_TEMP/gitleaks-bin"
+
+        if [ -x "$dest/gitleaks" ] && "$dest/gitleaks" version 2>/dev/null | grep -qx "$VERSION"; then
+          echo "::notice::Gitleaks $VERSION reaproveitado do cache"
+          exit 0
+        fi
+        rm -rf "$dest"
+
         case "$ARCH" in
           X64) arch=x64 ;;
           ARM64) arch=arm64 ;;
           *) echo "::error::Arquitetura nao suportada pelo Gitleaks: $ARCH"; exit 1 ;;
         esac
 
-        dest="$RUNNER_TEMP/gitleaks-bin"
-        mkdir -p "$dest"
         work="$(mktemp -d)"
         base="https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}"
         tarball="gitleaks_${VERSION}_linux_${arch}.tar.gz"
-
         checksums="gitleaks_${VERSION}_checksums.txt"
+
         curl -sSfL --retry 3 --retry-delay 2 -o "$work/$tarball" "$base/$tarball"
         curl -sSfL --retry 3 --retry-delay 2 -o "$work/$checksums" "$base/$checksums"
 
@@ -56,8 +64,14 @@ runs:
         # supply chain: confere o release contra o checksum publicado.
         ( cd "$work" && grep " $tarball\$" "$checksums" | sha256sum -c - )
 
-        tar -xzf "$work/$tarball" -C "$dest" gitleaks
-        chmod +x "$dest/gitleaks"
+        tar -xzf "$work/$tarball" -C "$work" gitleaks
+        chmod +x "$work/gitleaks"
+        "$work/gitleaks" version
+
+        # So publica o diretorio depois do binario pronto e validado, para nunca
+        # deixar um estado parcial no caminho que sera cacheado.
+        mkdir -p "$dest"
+        mv "$work/gitleaks" "$dest/gitleaks"
         rm -rf "$work"
 
     - name: Publicar Gitleaks no PATH
