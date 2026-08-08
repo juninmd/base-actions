@@ -50,11 +50,13 @@ jobs:
 
       # Sem esta prova, um scan quebrado passaria despercebido: nao encontrar
       # nada pareceria sucesso.
+      # O segredo e gerado na hora, e nao escrito aqui, para o proprio arquivo de
+      # teste nao virar um vazamento commitado no repositorio.
       - name: Plantar segredo nao suprimido
         run: |
           set -euo pipefail
           mkdir -p .security-scan-probe
-          printf 'password: "%s"\n' "qX7@vLm2#Zt9!Rb4_Pw6kNc8" > .security-scan-probe/config.yml
+          printf 'password: "%s"\n' "$(openssl rand -base64 24 | tr -d '\n=')" > .security-scan-probe/config.yml
           git -c user.email=ci@example.com -c user.name=ci add -f .security-scan-probe/config.yml
           git -c user.email=ci@example.com -c user.name=ci commit -q -m 'test: segredo plantado para o teste do scan'
 
@@ -64,11 +66,20 @@ jobs:
         with:
           fail-on-findings: 'true'
 
-      - name: Exigir que o scan tenha falhado
+      # Falhar nao basta: a action tambem falha se o download quebrar. O teste so
+      # vale se ela falhou por ter encontrado o segredo.
+      - name: Exigir reprovacao por achado
+        env:
+          OUTCOME: ${{ steps.probe.outcome }}
+          FINDINGS: ${{ steps.probe.outputs.findings }}
         run: |
           set -euo pipefail
-          if [ "${{ steps.probe.outcome }}" != "failure" ]; then
+          if [ "$OUTCOME" != "failure" ]; then
             echo "::error::O scan passou com um segredo plantado no historico. A varredura nao esta funcionando."
             exit 1
           fi
-          echo "Scan barrou o segredo plantado, como esperado."
+          if [ -z "$FINDINGS" ] || [ "$FINDINGS" -lt 1 ]; then
+            echo "::error::O scan falhou sem reportar achado (findings='$FINDINGS'). Falhou por erro de execucao, nao por deteccao."
+            exit 1
+          fi
+          echo "Scan barrou o segredo plantado: $FINDINGS achado(s), como esperado."
