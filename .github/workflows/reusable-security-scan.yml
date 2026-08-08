@@ -2,19 +2,34 @@ name: Reusable Security Scan
 
 on:
   workflow_call:
-    secrets:
-      GITHUB_TOKEN:
+    inputs:
+      gitleaks-version:
+        description: Versao fixada do Gitleaks
+        type: string
         required: false
+        default: '8.30.1'
+      fail-on-findings:
+        description: Falha o job quando encontrar segredo
+        type: boolean
+        required: false
+        default: true
+# Nao declare `secrets:` aqui. GITHUB_TOKEN e nome reservado e declara-lo em
+# workflow_call invalida o arquivo inteiro, derrubando com startup_failure todo
+# repositorio que chamar este workflow. A action usa github.token, que ja chega
+# sozinho.
 
 jobs:
   scan:
     permissions:
       contents: read
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # historico completo: segredo apagado continua no git
+          persist-credentials: false
       - uses: juninmd/base-actions/security-scan@main
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN || github.token }}
+        with:
+          gitleaks-version: ${{ inputs.gitleaks-version }}
+          fail-on-findings: ${{ inputs.fail-on-findings }}
