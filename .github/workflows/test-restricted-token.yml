@@ -1,0 +1,17 @@
+# Guarda de regressao: reproduz um repositorio cujo default do GITHUB_TOKEN e
+# "read-only". Um workflow chamado nao pode pedir mais permissao do que o caller
+# tem, e o excesso derruba o run inteiro com startup_failure -- sem job, sem
+# anotacao, invisivel. Se este caller ficar verde, o reusable roda em qualquer
+# repositorio; se virar startup_failure, alguem pediu permissao demais no callee.
+name: Test Restricted Token
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  caller-restrito:
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/reusable-validate.yml
