@@ -37,8 +37,35 @@ runs:
     # token read-only, e sem ela o passo morre com 403 em repositorio privado --
     # publico passava so porque dados de PR publicos sao legiveis sem escopo.
     # O binario le o proprio git clonado e nao depende de API nem de permissao.
+    # Intervalo vem do payload do evento, nao da API: em pull_request os SHAs de
+    # base e head ja chegam prontos. Sem intervalo (dispatch, branch nova) cai no
+    # historico completo. O gate olha a mudanca proposta; varrer o historico
+    # inteiro aqui reprovaria todo PR de repositorio com divida antiga, que e
+    # trabalho do reusable-security-scan.
+    - name: Definir intervalo da varredura
+      id: range
+      shell: bash
+      env:
+        EVENT: ${{ github.event_name }}
+        PR_BASE: ${{ github.event.pull_request.base.sha }}
+        PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        PUSH_BEFORE: ${{ github.event.before }}
+        PUSH_AFTER: ${{ github.sha }}
+      run: |
+        set -euo pipefail
+        zero=0000000000000000000000000000000000000000
+        range=""
+        if [ "$EVENT" = pull_request ] && [ -n "${PR_BASE:-}" ]; then
+          range="$PR_BASE..$PR_HEAD"
+        elif [ "$EVENT" = push ] && [ -n "${PUSH_BEFORE:-}" ] && [ "$PUSH_BEFORE" != "$zero" ]; then
+          range="$PUSH_BEFORE..$PUSH_AFTER"
+        fi
+        echo "log-opts=$range" >> "$GITHUB_OUTPUT"
+
     - name: Varredura de segredos
       uses: juninmd/base-actions/security-scan@main
+      with:
+        log-opts: ${{ steps.range.outputs.log-opts }}
 
     # ─── Version Detection ─────────────────────────────
     - name: Detect Runtime Versions
