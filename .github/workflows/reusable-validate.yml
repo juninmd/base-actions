@@ -16,9 +16,13 @@ on:
         default: 'latest'
 jobs:
   validate:
+    # Nao peca permissao alem de `contents: read`. Um workflow chamado herda o
+    # teto do caller, e em repositorio com default do GITHUB_TOKEN "read-only" o
+    # teto e contents+packages: read. Pedir `pull-requests` derruba o run inteiro
+    # com startup_failure -- sem job e sem anotacao, entao o gate parece existir
+    # e nunca roda. Coberto por test-restricted-token.yml.
     permissions:
       contents: read
-      pull-requests: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
