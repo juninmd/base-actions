@@ -20,3 +20,19 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./validate-pr
+
+  # Prova que o scan aceita mesmo um intervalo: `detect` e o alias antigo do
+  # gitleaks e podia ignorar ou rejeitar --log-opts. Roda a action pelo caminho
+  # local, entao testa a versao desta branch e nao a que ja esta em main.
+  scan-incremental:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./security-scan
+        with:
+          log-opts: ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
+
