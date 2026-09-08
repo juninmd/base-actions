@@ -1,0 +1,22 @@
+# O reusable aponta para validate-pr@main, entao uma mudanca na action so seria
+# exercitada depois de mergeada -- foi assim que um passo quebrado em evento de
+# pull_request passou batido. Aqui a action e usada pelo caminho local, isto e, a
+# versao da propria branch, e com o token no teto mais apertado que um consumidor
+# pode ter.
+name: Test Validate PR (branch)
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  local:
+    permissions:
+      contents: read
+      packages: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./validate-pr
