@@ -10,6 +10,13 @@ inputs:
     description: Falha o job quando encontrar segredo. Desligue apenas para inventario.
     required: false
     default: 'true'
+  log-opts:
+    description: >
+      Intervalo git a varrer, no formato "base..head". Vazio varre o historico
+      completo. O gate de PR manda o intervalo do proprio PR; a varredura de
+      historico do reusable-security-scan deixa vazio.
+    required: false
+    default: ''
 
 outputs:
   findings:
@@ -104,6 +111,7 @@ runs:
       env:
         CONFIG: ${{ steps.cfg.outputs.path }}
         FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        LOG_OPTS: ${{ inputs.log-opts }}
       run: |
         set -uo pipefail
         gitleaks version
@@ -112,6 +120,17 @@ runs:
         # --redact impede que o segredo apareca no log publico do job.
         # --exit-code 0 devolve o controle da falha para ca, permitindo resumir
         # os achados antes de encerrar.
+        # Sem intervalo varre o historico inteiro; com intervalo olha so os commits
+        # do PR ou do push. Um gate de PR que reprova por segredo antigo do
+        # repositorio nao diz nada sobre a mudanca proposta e trava todo mundo.
+        range_args=""
+        if [ -n "${LOG_OPTS:-}" ]; then
+          echo "::notice::Varredura incremental: $LOG_OPTS"
+          range_args="--log-opts=$LOG_OPTS"
+        else
+          echo "::notice::Varredura do historico completo"
+        fi
+
         gitleaks detect \
           --source . \
           --config "$CONFIG" \
@@ -119,7 +138,7 @@ runs:
           --report-path "$report" \
           --redact \
           --no-banner \
-          --exit-code 0
+          --exit-code 0 $range_args
         status=$?
         if [ $status -ne 0 ]; then
           echo "::error::Gitleaks falhou ao executar (codigo $status)"
