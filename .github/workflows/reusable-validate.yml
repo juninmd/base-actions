@@ -14,6 +14,23 @@ on:
         type: string
         required: false
         default: 'latest'
+      persist-credentials:
+        type: boolean
+        required: false
+        default: false
+        description: >-
+          Manter o header de auth do checkout no .git/config. Default false: o
+          validate-pr instala as dependencias do PR, e um postinstall malicioso
+          leria esse header para usar o GITHUB_TOKEN (contents: read) do job.
+          Ligue apenas se o repositorio tem dependencia `git+https://github.com/...`
+          privada que precisa da credencial durante o install.
+
+# Sem `concurrency` aqui de proposito. Num workflow chamado, `github.workflow` e o
+# nome do workflow do CHAMADOR, entao dois jobs do mesmo caller invocando este
+# reusable cairiam no mesmo grupo e um cancelaria o outro -- o cancelado reporta
+# `cancelled` e trava o merge como required check, sem log explicando nada.
+# Politica de concorrencia e do caller.
+
 jobs:
   validate:
     # Nao peca permissao alem de `contents: read`. Um workflow chamado herda o
@@ -24,8 +41,26 @@ jobs:
     permissions:
       contents: read
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
+      # fetch-depth: 0 e obrigatorio -- a varredura de segredos do validate-pr le
+      # o intervalo do PR direto do git clonado, sem API.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: ${{ inputs.persist-credentials }}
+      # O `with:` foi removido em 0ad778c como tentativa as cegas durante a cacada
+      # ao startup_failure; a causa real era a permissao `pull-requests` (d3adc12).
+      # Sem ele os tres inputs acima eram aceitos e silenciosamente ignorados --
+      # quem passava node-version: '18' rodava no 22.
+      # Cobertura, sendo honesto sobre o limite: `inputs-honored` no CI assere
+      # `node -v` depois de rodar ./validate-pr, ou seja, prova que a ACTION honra
+      # o input. `call-reusable-validate` prova que ESTE workflow nao da
+      # startup_failure e passa um valor nao-default. O elo final -- o `with:`
+      # daqui chegando na action -- so e observavel depois do merge, porque a
+      # linha abaixo resolve validate-pr@main e nao a versao da branch.
       - uses: juninmd/base-actions/validate-pr@main
+        with:
+          node-version: ${{ inputs.node-version }}
+          python-version: ${{ inputs.python-version }}
+          pnpm-version: ${{ inputs.pnpm-version }}
