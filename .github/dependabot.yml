@@ -1,0 +1,26 @@
+version: 2
+updates:
+  # actions do próprio base-actions: como 140+ repos consomem daqui via @main,
+  # manter só este repo atualizado propaga a correção para todos.
+  #
+  # `directory: /` cobre APENAS .github/workflows + action.yml da raiz. As composite
+  # actions vivem em subpastas e ficavam invisíveis para o Dependabot (por isso
+  # actions/cache@v4 em setup-ollama nunca foi bumpado junto do resto).
+  - package-ecosystem: github-actions
+    directories:
+      - /
+      - /deploy-to-argocd
+      - /docker-build-push
+      - /quality-check
+      - /security-scan
+      - /setup-node-pnpm
+      - /setup-ollama
+      - /validate-pr
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ['*']
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: 'chore(deps)'

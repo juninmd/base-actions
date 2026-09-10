@@ -9,8 +9,26 @@ inputs:
     description: Image tag (informational)
     required: false
     default: latest
+  argocd-server:
+    description: ArgoCD server hostname (sem esquema)
+    required: false
+    default: argocd.antonio-code.duckdns.org
+  argocd-token:
+    description: >-
+      ArgoCD API token. Se vazio, cai no env ARGOCD_AUTH_TOKEN (compatibilidade).
+      Sem token o passo é pulado (ArgoCD auto-sync assume).
+    required: false
+    default: ''
+  force:
+    description: Enviar force=true no sync
+    required: false
+    default: 'true'
+  fail-on-error:
+    description: Falhar o job quando o sync retornar erro (recomendado)
+    required: false
+    default: 'true'
   charts-token:
-    description: GitHub token (kept for compatibility)
+    description: Deprecated, sem efeito. Mantido para compatibilidade de callers.
     required: false
     default: ''
 
@@ -19,18 +37,43 @@ runs:
   steps:
     - name: Sync ArgoCD app
       shell: bash
+      # inputs via env (nunca interpolados no corpo do script): evita injeção de shell
       env:
-        ARGOCD_SERVER: argocd.antonio-code.duckdns.org
-        ARGOCD_AUTH_TOKEN: ${{ env.ARGOCD_AUTH_TOKEN }}
+        ARGOCD_SERVER: ${{ inputs.argocd-server }}
+        ARGOCD_TOKEN_INPUT: ${{ inputs.argocd-token }}
+        APP_NAME: ${{ inputs.app-name }}
+        IMAGE_TAG: ${{ inputs.image-tag }}
+        FORCE: ${{ inputs.force }}
+        FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
       run: |
-        if [ -z "$ARGOCD_AUTH_TOKEN" ]; then
-          echo "⚠️  ARGOCD_AUTH_TOKEN não configurado — skipping deploy (ArgoCD auto-sync ativo)"
+        set -uo pipefail
+        TOKEN="${ARGOCD_TOKEN_INPUT:-${ARGOCD_AUTH_TOKEN:-}}"
+        if [ -z "$TOKEN" ]; then
+          echo "::warning::ARGOCD token ausente — sync pulado (ArgoCD auto-sync ativo)"
           exit 0
         fi
-        curl -sf -X POST \
-          "https://${ARGOCD_SERVER}/api/v1/applications/${{ inputs.app-name }}/sync" \
-          -H "Authorization: Bearer ${ARGOCD_AUTH_TOKEN}" \
+
+        case "$FORCE" in
+          true|false) ;;
+          *) echo "::error::input 'force' deve ser true ou false (recebido: $FORCE)"; exit 1 ;;
+        esac
+
+        echo "🚀 Sync ${APP_NAME} (tag: ${IMAGE_TAG}) em ${ARGOCD_SERVER}"
+        body=$(mktemp)
+        code=$(curl -s -o "$body" -w '%{http_code}' --max-time 60 --retry 2 --retry-delay 5 \
+          -X POST "https://${ARGOCD_SERVER}/api/v1/applications/${APP_NAME}/sync" \
+          -H "Authorization: Bearer ${TOKEN}" \
           -H "Content-Type: application/json" \
-          -d '{"revision":"HEAD","prune":false,"force":true}' \
-          && echo "✅ ArgoCD sync triggered for ${{ inputs.app-name }}" \
-          || echo "⚠️  ArgoCD sync falhou — verifique ARGOCD_AUTH_TOKEN"
+          -d "{\"revision\":\"HEAD\",\"prune\":false,\"force\":${FORCE}}") || code=000
+
+        if [ "$code" = "200" ]; then
+          echo "✅ ArgoCD sync disparado para ${APP_NAME}"
+          exit 0
+        fi
+
+        # o corpo do erro do ArgoCD não carrega o token, mas pode carregar detalhes do app
+        echo "::error::ArgoCD sync falhou para ${APP_NAME} (HTTP ${code})"
+        head -c 500 "$body" || true
+        echo
+        if [ "$FAIL_ON_ERROR" = "true" ]; then exit 1; fi
+        echo "::warning::fail-on-error=false — seguindo mesmo com sync falho"

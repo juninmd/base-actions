@@ -6,6 +6,23 @@ on:
       image-name:
         type: string
         required: true
+      context:
+        type: string
+        required: false
+        default: '.'
+      file:
+        type: string
+        required: false
+        default: ''
+      build-args:
+        type: string
+        required: false
+        default: ''
+      push:
+        type: boolean
+        required: false
+        default: true
+        description: false = build-only (útil em PR, valida o Dockerfile sem publicar).
       charts-path:
         type: string
         required: false
@@ -20,20 +37,39 @@ on:
       CHARTS_TOKEN:
         required: false
 
+# chaveado pela imagem, nao por github.workflow (que num workflow chamado e o
+# nome do workflow do CALLER e colocaria dois jobs distintos no mesmo grupo).
+concurrency:
+  group: docker-build-${{ inputs.image-name }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: juninmd/base-actions/docker-build-push@main
         with:
           image-name: ${{ inputs.image-name }}
           github-token: ${{ secrets.GH_TOKEN }}
+          context: ${{ inputs.context }}
+          file: ${{ inputs.file }}
+          build-args: ${{ inputs.build-args }}
+          push: ${{ inputs.push }}
 
   deploy:
     needs: build
-    if: ${{ inputs.charts-path != '' }}
+    if: ${{ inputs.charts-path != '' && inputs.push }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
     env:
       CHARTS_TOKEN: ${{ secrets.CHARTS_TOKEN }}
     steps:
@@ -51,12 +87,55 @@ jobs:
           IMAGE: ghcr.io/${{ inputs.image-name }}
           CHARTS_PATH: ${{ inputs.charts-path }}
         run: |
-          mapfile -t files < <(grep -rlE "image: *${IMAGE}:" "$CHARTS_PATH")
+          set -euo pipefail
+          case "$CHARTS_PATH" in
+            /*|*..*) echo "::error::charts-path inválido: $CHARTS_PATH"; exit 1 ;;
+          esac
+          [ -d "$CHARTS_PATH" ] || { echo "::error::charts-path não existe: $CHARTS_PATH"; exit 1; }
+
+          # metadata-action publica a tag em minusculas; o nome do repo pode ter
+          # maiuscula. Sem normalizar, o grep abaixo nunca casa.
+          IMAGE=$(printf '%s' "$IMAGE" | tr '[:upper:]' '[:lower:]')
+
+          # grep -F (fixed string): o nome da imagem tem `.` e `/`, escapá-lo para regex
+          # em shell é frágil demais para um caminho que falha silencioso quando erra.
+          mapfile -t files < <(grep -rlF "${IMAGE}:" "$CHARTS_PATH" || true)
           if [ ${#files[@]} -eq 0 ]; then
-            echo "::warning::nenhum manifesto referencia ${IMAGE} em ${CHARTS_PATH}"; exit 0
+            # charts-path foi pedido explicitamente: não achar manifesto é falha, não aviso
+            echo "::error::nenhum manifesto referencia ${IMAGE} em ${CHARTS_PATH}"
+            exit 1
           fi
-          sed -i -E "s#(${IMAGE}):[^\"[:space:]]+#\1:${GITHUB_SHA}#g" "${files[@]}"
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git diff --quiet || git commit -am "deploy(${CHARTS_PATH}): ${GITHUB_SHA::7} [skip ci]"
-          git push
+          echo "manifestos encontrados: ${files[*]}"
+
+          # substituição em Python: re.escape resolve o quoting de forma inequívoca
+          python3 - "$IMAGE" "$GITHUB_SHA" "${files[@]}" <<'PYEOF'
+          import re, sys
+          image, sha, *files = sys.argv[1:]
+          pattern = re.compile(re.escape(image) + r':[^"\s]+')
+          for path in files:
+              with open(path, encoding='utf-8') as fh:
+                  before = fh.read()
+              after = pattern.sub(image + ':' + sha, before)
+              if after != before:
+                  with open(path, 'w', encoding='utf-8') as fh:
+                      fh.write(after)
+                  print(f'pinned {path}')
+          PYEOF
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "::notice::tag já estava em ${GITHUB_SHA::7} — nada a commitar"; exit 0
+          fi
+          git commit -am "deploy(${CHARTS_PATH}): ${GITHUB_SHA::7} [skip ci]"
+
+          # app-charts recebe push de N repos em paralelo: rebase-and-retry em vez de falhar
+          for attempt in 1 2 3 4 5; do
+            if git push; then echo "✅ push ok (tentativa ${attempt})"; exit 0; fi
+            echo "::notice::push rejeitado — rebase e retry (${attempt}/5)"
+            sleep $(( attempt * 3 ))
+            # conflito no rebase deixaria o clone travado e mataria o script sob set -e
+            git pull --rebase --autostash || { git rebase --abort 2>/dev/null || true; }
+          done
+          echo "::error::não foi possível dar push em app-charts após 5 tentativas"
+          exit 1

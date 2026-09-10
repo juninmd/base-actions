@@ -1,0 +1,8 @@
+# Scripts bash vivem dentro dos action.yml: um CRLF que vaze para o repo quebra
+# TODAS as composite actions no runner Linux ("$'\r': command not found").
+* text=auto eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.md text eol=lf

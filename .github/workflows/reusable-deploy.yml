@@ -10,18 +10,30 @@ on:
         type: string
         required: false
         default: latest
+      argocd-server:
+        type: string
+        required: false
+        default: argocd.antonio-code.duckdns.org
     secrets:
       ARGOCD_AUTH_TOKEN:
         required: false
 
+# Deploy nunca é cancelado no meio; apenas serializa por app.
+concurrency:
+  group: deploy-${{ inputs.app-name }}
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      # sem checkout: a composite action é baixada direto do base-actions e não lê o repo do chamador
       - uses: juninmd/base-actions/deploy-to-argocd@main
-        env:
-          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
         with:
           app-name: ${{ inputs.app-name }}
           image-tag: ${{ inputs.image-tag }}
+          argocd-server: ${{ inputs.argocd-server }}
+          argocd-token: ${{ secrets.ARGOCD_AUTH_TOKEN }}

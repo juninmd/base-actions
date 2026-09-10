@@ -38,9 +38,9 @@ jobs:
         run: |
           # Simple tag generation based on date and commit hash
           TAG_NAME="v$(date +'%Y.%m.%d')-$(git rev-parse --short HEAD)"
-          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
-          git tag $TAG_NAME
-          git push origin $TAG_NAME
+          echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
+          git tag "$TAG_NAME"
+          git push origin "$TAG_NAME"
 
       - name: Create Release
         if: ${{ inputs.generate-release }}
