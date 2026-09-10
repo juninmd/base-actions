@@ -19,16 +19,23 @@ runs:
   using: "composite"
   steps:
     - name: Setup Node & PNPM
-      uses: ./setup-node-pnpm
+      # caminho relativo em composite action resolve no workspace do CHAMADOR — precisa ser absoluto
+      uses: juninmd/base-actions/setup-node-pnpm@main
       with:
         node-version: ${{ inputs.node-version }}
 
+    # run-lint/run-test são opt-in explícito: script ausente é erro de configuração,
+    # não motivo para passar verde (--if-present esconderia um rename/merge ruim).
     - name: Run Lint
       if: ${{ inputs.run-lint == 'true' }}
       shell: bash
-      run: pnpm lint
+      run: |
+        node -e "process.exit(require('./package.json').scripts?.lint ? 0 : 1)"           || { echo "::error::run-lint=true mas não existe script \"lint\" no package.json"; exit 1; }
+        pnpm lint
 
     - name: Run Tests
       if: ${{ inputs.run-test == 'true' }}
       shell: bash
-      run: pnpm test
+      run: |
+        node -e "process.exit(require('./package.json').scripts?.test ? 0 : 1)"           || { echo "::error::run-test=true mas não existe script \"test\" no package.json"; exit 1; }
+        pnpm test

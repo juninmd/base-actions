@@ -26,3 +26,11 @@ setup-ollama/    # Ollama setup action
 
 ## Usage
 Reference in workflows with `uses: juninmd/base-actions/<action>@main`
+
+## Regras deste repo
+- Consumido por 140+ repos via `@main`: commit quebrado aqui = pipeline quebrado em todos.
+- Antes de qualquer commit: `actionlint` e `python .github/scripts/lint-actions.py`.
+- Shell dentro de `action.yml` nunca interpola `${{ inputs.* }}` direto no `run:` —
+  passe por `env:` (o linter bloqueia).
+- Falha silenciosa é bug: nada de `|| echo "..."` engolindo exit code de teste ou deploy.
+- Arquivos YAML são LF puro e sem BOM (`.gitattributes` garante).

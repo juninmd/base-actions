@@ -37,24 +37,37 @@ runs:
       uses: actions/cache@v4
       with:
         path: ~/.ollama/models
-        key: ollama-models-${{ inputs.model }}
+        key: ollama-models-${{ runner.os }}-${{ inputs.model }}
+        restore-keys: |
+          ollama-models-${{ runner.os }}-
 
     - name: Install and Start Ollama
       shell: bash
       env:
         OLLAMA_HOST: ${{ inputs.ollama-host }}
+        WAIT_TIMEOUT: ${{ inputs.wait-timeout }}
       run: |
+        set -euo pipefail
         echo "📥 Instalando Ollama..."
         curl -fsSL https://ollama.com/install.sh | sh
-        
-        echo "🚀 Iniciando serviço Ollama em $OLLAMA_HOST..."
-        export OLLAMA_HOST="$OLLAMA_HOST"
+
+        # o install.sh sobe um systemd unit rodando como usuário `ollama`, cujos modelos
+        # vão para /usr/share/ollama/.ollama/models — fora do path cacheado, e a porta
+        # ocupada fazia o nosso `ollama serve` morrer em silêncio. Derruba e assume.
+        sudo systemctl stop ollama 2>/dev/null || true
+        sudo systemctl disable ollama 2>/dev/null || true
+
+        export OLLAMA_MODELS="$HOME/.ollama/models"
+        mkdir -p "$OLLAMA_MODELS"
+        echo "OLLAMA_MODELS=$OLLAMA_MODELS" >> "$GITHUB_ENV"
+        echo "OLLAMA_HOST=$OLLAMA_HOST" >> "$GITHUB_ENV"
+
+        echo "🚀 Iniciando serviço Ollama em $OLLAMA_HOST (modelos em $OLLAMA_MODELS)..."
         nohup ollama serve > /tmp/ollama.log 2>&1 &
-        
-        TIMEOUT=${{ inputs.wait-timeout }}
-        echo "⏳ Aguardando Ollama estar pronto (máximo ${TIMEOUT}s)..."
-        if ! timeout $TIMEOUT bash -c 'while ! curl -s "$OLLAMA_HOST/api/tags" > /dev/null 2>&1; do sleep 1; done'; then
-          echo "❌ Timeout: Ollama não respondeu"
+
+        echo "⏳ Aguardando Ollama estar pronto (máximo ${WAIT_TIMEOUT}s)..."
+        if ! timeout "$WAIT_TIMEOUT" bash -c 'until curl -sf "$OLLAMA_HOST/api/tags" >/dev/null; do sleep 1; done'; then
+          echo "::error::Timeout: Ollama não respondeu em ${WAIT_TIMEOUT}s"
           cat /tmp/ollama.log
           exit 1
         fi
@@ -63,19 +76,28 @@ runs:
     - name: Pull Ollama Model
       shell: bash
       env:
-        OLLAMA_HOST: ${{ inputs.ollama-host }}
+        MODEL: ${{ inputs.model }}
+        PULL_TIMEOUT_MIN: ${{ inputs.pull-timeout }}
+        CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
       run: |
-        if [ "${{ steps.cache.outputs.cache-hit }}" != 'true' ]; then
-          TIMEOUT_SECS=$((${{ inputs.pull-timeout }} * 60))
-          echo "📥 Puxando modelo (timeout: ${{ inputs.pull-timeout }}m)..."
-          timeout $TIMEOUT_SECS ollama pull "${{ inputs.model }}" || exit 1
+        set -euo pipefail
+        # cache-hit não garante que ESTE modelo está lá (restore-keys traz cache parcial)
+        # `ollama pull llama3` guarda como `llama3:latest`, entao comparar com o nome
+        # cru nunca casa. Normaliza a tag e compara exato na 1a coluna, com -F para
+        # o `.` de nomes como llama3.2 nao virar curinga.
+        case "$MODEL" in *:*) WANT="$MODEL" ;; *) WANT="$MODEL:latest" ;; esac
+        installed() { ollama list | awk 'NR>1{print $1}' | grep -qxF "$WANT"; }
+        if installed; then
+          echo "📦 Modelo $WANT recuperado do cache (cache-hit=${CACHE_HIT:-false})"
         else
-          echo "📦 Modelo ${{ inputs.model }} recuperado do cache!"
+          echo "📥 Puxando modelo $MODEL (timeout: ${PULL_TIMEOUT_MIN}m)..."
+          timeout "$(( PULL_TIMEOUT_MIN * 60 ))" ollama pull "$MODEL"
         fi
-        
+
         echo "📋 Verificando disponibilidade:"
-        if ! ollama list | grep -q "${{ inputs.model }}"; then
-          echo "❌ Erro: Modelo ${{ inputs.model }} não encontrado."
+        if ! installed; then
+          echo "::error::Modelo $WANT não encontrado após o pull."
+          ollama list
           exit 1
         fi
         echo "✅ Setup concluído com sucesso!"

@@ -2,22 +2,94 @@ name: Release Drafter
 
 on:
   push:
-    branches:
-      - main
-      - master
-  pull_request:
+    branches: [main, master]
+  # pull_request_target: o autolabeler precisa de escrita tambem em PR de fork
+  # (em `pull_request` o token e read-only). Ver a guarda no job `autolabel`.
+  pull_request_target:
     types: [opened, reopened, synchronize]
 
 permissions:
   contents: read
 
+concurrency:
+  group: release-drafter-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  update_release_draft:
+  # Roda so em push na branch default, onde o token e do proprio repo e nenhum
+  # codigo de fork esta envolvido. Tambem e aqui que as labels sao criadas: o
+  # autolabeler nao cria label inexistente e quebra quando nao encontra.
+  draft:
+    if: github.event_name == 'push'
     permissions:
       contents: write
+      pull-requests: read
+      issues: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Garantir que as labels existem
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          while IFS='|' read -r name color; do
+            [ -n "$name" ] || continue
+            # so "already exists" e tolerado: engolir tudo esconderia falha de
+            # auth, rate limit ou rede, e o autolabeler quebraria depois na label
+            # que nao foi criada -- o modo de falha que este passo existe para evitar.
+            if err=$(gh label create "$name" --color "$color" 2>&1); then
+              echo "label '$name' criada"
+            elif printf '%s' "$err" | grep -qi 'already exists'; then
+              echo "label '$name' ja existe"
+            else
+              echo "::error::falha ao criar label '$name': $err"
+              exit 1
+            fi
+          done <<'LABELS'
+          feature|0e8a16
+          enhancement|0e8a16
+          fix|d73a4a
+          bug|d73a4a
+          security|b60205
+          dependencies|0366d6
+          docs|0075ca
+          ci|c5def5
+          refactor|fbca04
+          chore|ededed
+          breaking|b60205
+          skip-changelog|ededed
+          LABELS
+
+      - uses: release-drafter/release-drafter@v7
+        with:
+          disable-autolabeler: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ⚠️ Este job roda em `pull_request_target`, ou seja, com o token do repositorio
+  # base e nao o do fork. NUNCA adicione `actions/checkout` nem qualquer step que
+  # execute codigo do PR aqui (build, npm ci, script do repo): seria RCE com esse
+  # token a partir de qualquer fork. O release-drafter so fala com a API do GitHub
+  # e nunca baixa a arvore do PR. Permissao limitada a `pull-requests: write` --
+  # sem `contents: write`, sem `issues: write`; as labels ja foram criadas no job
+  # `draft`, que roda em push.
+  autolabel:
+    if: github.event_name == 'pull_request_target'
+    permissions:
+      # `permissions:` de job SUBSTITUI o do workflow: tudo que nao esta aqui vira
+      # `none`. Sem `contents: read` o release-drafter nao le a propria config pela
+      # API de conteudo e morre em todo PR. `pull-requests: write` basta para rotular
+      # (POST /issues/{n}/labels aceita o escopo de PR); `issues: write` so e preciso
+      # para CRIAR label, e isso vive no job `draft`.
+      contents: read
       pull-requests: write
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: release-drafter/release-drafter@v7
+        with:
+          disable-releaser: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
