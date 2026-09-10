@@ -30,7 +30,7 @@ runs:
     # seguintes, evitando um download de release a cada job.
     - name: Restaurar Gitleaks do cache
       id: cache
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ${{ runner.temp }}/gitleaks-bin
         key: gitleaks-${{ runner.os }}-${{ runner.arch }}-${{ inputs.gitleaks-version }}

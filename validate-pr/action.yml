@@ -98,7 +98,7 @@ runs:
     # ─── Node.js ──────────────────────────────────────
     - name: Setup Node.js
       if: hashFiles('package.json') != ''
-      uses: actions/setup-node@v6
+      uses: actions/setup-node@v7
       with:
         node-version: ${{ env.NODE_VERSION_DETECTED }}
 
@@ -200,13 +200,13 @@ runs:
     # ─── Python ───────────────────────────────────────
     - name: Setup uv
       if: hashFiles('pyproject.toml') != '' || hashFiles('uv.lock') != ''
-      uses: astral-sh/setup-uv@v8.1.0
+      uses: astral-sh/setup-uv@v10.0.1
       with:
         python-version: ${{ env.PYTHON_VERSION_DETECTED }}
 
     - name: Setup Python
       if: (hashFiles('pyproject.toml') != '' || hashFiles('requirements.txt') != '') && hashFiles('uv.lock') == ''
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: ${{ env.PYTHON_VERSION_DETECTED }}
 
