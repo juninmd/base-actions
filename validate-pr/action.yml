@@ -70,9 +70,12 @@ runs:
     # ─── Version Detection ─────────────────────────────
     - name: Detect Runtime Versions
       shell: bash
+      env:
+        NODE_VERSION_INPUT: ${{ inputs.node-version }}
+        PYTHON_VERSION_INPUT: ${{ inputs.python-version }}
       run: |
-        NODE_VER="${{ inputs.node-version }}"
-        PYTHON_VER="${{ inputs.python-version }}"
+        NODE_VER="$NODE_VERSION_INPUT"
+        PYTHON_VER="$PYTHON_VERSION_INPUT"
         if [ -f ".nvmrc" ]; then
           NODE_VER=$(cat .nvmrc | tr -d 'v \n\r')
         elif [ -f ".node-version" ]; then
@@ -179,10 +182,19 @@ runs:
         if [ "$NODE_MAJOR" -ge 17 ] 2>/dev/null; then
           export NODE_OPTIONS="--openssl-legacy-provider"
         fi
-        if [ -f "pnpm-lock.yaml" ]; then
-          pnpm run --if-present test
-        else
-          npm test --if-present 2>&1 || { ec=$?; if npm test 2>&1 | grep -q "no test specified"; then echo "::warning::No tests configured (npm default stub)"; else exit $ec; fi; }
+        # le o script direto do package.json: `npm test --if-present` nao e confiavel
+        # (--if-present e flag de `npm run`) e o stub padrao do npm sai com erro.
+        script=$(node -p "try{require('./package.json').scripts.test||''}catch(e){''}")
+        if [ -z "$script" ]; then
+          echo "::notice::Sem script \"test\" no package.json — etapa pulada"; exit 0
+        fi
+        case "$script" in
+          *"no test specified"*)
+            echo "::warning::Script de teste e o stub padrao do npm — nenhum teste roda"; exit 0 ;;
+        esac
+        if [ -f "pnpm-lock.yaml" ]; then pnpm test
+        elif [ -f "yarn.lock" ]; then yarn test
+        else npm test
         fi
 
     # ─── Python ───────────────────────────────────────
@@ -214,23 +226,40 @@ runs:
       if: hashFiles('pyproject.toml') != '' || hashFiles('uv.lock') != ''
       shell: bash
       run: |
+        # lint e informativo (mesmo criterio do Node): reporta, nao bloqueia
         if [ -f "uv.lock" ]; then
-          uv run ruff check . --exit-zero 2>/dev/null || echo "No ruff config found"
+          uv run ruff check . || echo "::warning::ruff reportou problemas (non-blocking)"
         else
-          pip install ruff 2>/dev/null || true
-          ruff check . --exit-zero 2>/dev/null || echo "No ruff config found"
+          pip install --quiet ruff || { echo "::warning::ruff indisponivel"; exit 0; }
+          ruff check . || echo "::warning::ruff reportou problemas (non-blocking)"
         fi
 
     - name: Test Python
       if: hashFiles('pyproject.toml') != '' || hashFiles('uv.lock') != ''
       shell: bash
       run: |
+        set -o pipefail
+        # ANTES: `pytest ... 2>/dev/null || echo "No tests found"` engolia QUALQUER
+        # falha real de teste e o gate ficava verde. Agora: ausencia de testes e skip
+        # explicito (exit 5 do pytest) e falha de teste derruba o job.
+        # `--timeout` tambem saiu: exige o plugin pytest-timeout, que nao era instalado,
+        # entao o pytest abortava com erro de uso e a mensagem sumia no /dev/null.
         if [ -f "uv.lock" ]; then
-          uv run pytest -x --timeout=30 2>/dev/null || echo "No tests found"
+          RUNNER=(uv run pytest)
         else
-          pip install pytest pytest-asyncio 2>/dev/null || true
-          python -m pytest -x --timeout=30 2>/dev/null || echo "No tests found"
+          pip install --quiet pytest pytest-asyncio || { echo "::error::nao foi possivel instalar pytest — gate nao pode ser validado"; exit 1; }
+          RUNNER=(python -m pytest)
         fi
+
+        set +e
+        "${RUNNER[@]}" -x -q
+        ec=$?
+        set -e
+        case "$ec" in
+          0) echo "✅ Testes Python passaram" ;;
+          5) echo "::notice::Nenhum teste Python coletado — etapa pulada" ;;
+          *) echo "::error::Testes Python falharam (pytest exit ${ec})"; exit "$ec" ;;
+        esac
 
     # ─── Helm / K8s ───────────────────────────────────
     - name: Install Helm
@@ -241,7 +270,7 @@ runs:
       if: hashFiles('**/Chart.yaml') != ''
       shell: bash
       run: |
-        find . -name "Chart.yaml" -exec dirname {} \; | while read chart; do
+        find . -name "Chart.yaml" -not -path "*/charts/*" -exec dirname {} \; | while read -r chart; do
           echo "Linting chart: $chart"
           helm lint "$chart"
           helm template "$chart" > /dev/null
