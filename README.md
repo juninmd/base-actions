@@ -49,6 +49,11 @@ jobs:
 ```
 
 Tags publicadas: `latest` (somente na branch default) e o SHA completo do commit.
+
+A composite `docker-build-push` aceita `secrets` (BuildKit, `id=value` por linha) para
+tokens de registry no build, ex.: `npmrc=//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}`
+com `RUN --mount=type=secret,id=npmrc,target=/root/.npmrc` no Dockerfile. Nunca use
+`build-args` para token: ele fica no historico da imagem.
 Cache do buildx e escopado por workflow para os repos nao disputarem a mesma entrada.
 
 ### 3. ArgoCD Sync

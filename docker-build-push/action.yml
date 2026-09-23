@@ -20,6 +20,13 @@ inputs:
     description: Newline-separated build args
     required: false
     default: ''
+  secrets:
+    description: >-
+      Newline-separated BuildKit secrets (id=value), lidos no Dockerfile com
+      RUN --mount=type=secret. Use para tokens de registry: build-args ficam
+      gravados no historico da imagem, secrets nao.
+    required: false
+    default: ''
   push:
     description: Push the image (false = build only, para PRs)
     required: false
@@ -68,6 +75,7 @@ runs:
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         build-args: ${{ inputs.build-args }}
+        secrets: ${{ inputs.secrets }}
         # scope por repo+workflow: evita que repos diferentes disputem a mesma
         # entrada de cache do GHA (limite de 10GB por repositório)
         cache-from: type=gha,scope=${{ github.workflow }}
