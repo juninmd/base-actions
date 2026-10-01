@@ -16,9 +16,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Roda so em push na branch default, onde o token e do proprio repo e nenhum
-  # codigo de fork esta envolvido. Tambem e aqui que as labels sao criadas: o
-  # autolabeler nao cria label inexistente e quebra quando nao encontra.
   draft:
     if: github.event_name == 'push'
     permissions:
@@ -75,17 +72,17 @@ jobs:
   # e nunca baixa a arvore do PR. Permissao limitada a `pull-requests: write` --
   # sem `contents: write`, sem `issues: write`; as labels ja foram criadas no job
   # `draft`, que roda em push.
-   autolabel:
-     if: github.event_name == 'pull_request_target'
-     permissions:
-       # `permissions:` de job SUBSTITUI o do workflow: tudo que nao esta aqui vira
-       # `none`. Sem `contents: read` o release-drafter nao le a propria config pela
-       # API de conteudo e morre em todo PR. `pull-requests: write` basta para rotular
-       # (POST /issues/{n}/labels aceita o escopo de PR); `issues: write` so e preciso
-       # para CRIAR label, e isso vive no job `draft`.
-       # Adicionado contents: write para permitir criacao de release quando necessario
-       contents: write
-       pull-requests: write
+  autolabel:
+    if: github.event_name == 'pull_request_target'
+    permissions:
+      # `permissions:` de job SUBSTITUI o do workflow: tudo que nao esta aqui vira
+      # `none`. Sem `contents: read` o release-drafter nao le a propria config pela
+      # API de conteudo e morre em todo PR. `pull-requests: write` basta para rotular
+      # (POST /issues/{n}/labels aceita o escopo de PR); `issues: write` so e preciso
+      # para CRIAR label, e isso vive no job `draft`.
+      # Adicionado contents: write para permitir criacao de release quando necessario
+      contents: write
+      pull-requests: write
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
