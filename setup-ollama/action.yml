@@ -2,6 +2,12 @@ name: 'Setup Ollama with Model'
 description: 'Instala Ollama, inicia o serviço, configura cache e puxa o modelo'
 
 inputs:
+  version:
+    description: >-
+      Versao do Ollama (sem o "v"). Baixada do release oficial e conferida contra o
+      sha256sum.txt publicado, no lugar do `curl | sh` do install.sh.
+    required: false
+    default: '0.40.6'
   model:
     description: 'Nome do modelo Ollama a usar (ex: gemma3:1b)'
     required: true
@@ -31,44 +37,73 @@ runs:
   using: 'composite'
 
   steps:
+    - name: Validar plataforma
+      shell: bash
+      env:
+        RUNNER_OS_NAME: ${{ runner.os }}
+      run: |
+        if [ "$RUNNER_OS_NAME" != "Linux" ]; then
+          echo "::error::setup-ollama so suporta runners Linux (recebido: $RUNNER_OS_NAME)"
+          exit 1
+        fi
+
+    # v1 no prefixo: muda o layout do cache sem herdar entradas incompativeis
     - name: Ollama Models Cache
       if: inputs.cache-enabled == 'true'
       id: cache
-      uses: actions/cache@v6
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
       with:
         path: ~/.ollama/models
-        key: ollama-models-${{ runner.os }}-${{ inputs.model }}
+        key: ollama-models-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.model }}
         restore-keys: |
-          ollama-models-${{ runner.os }}-
+          ollama-models-v1-${{ runner.os }}-${{ runner.arch }}-
 
     - name: Install and Start Ollama
       shell: bash
       env:
         OLLAMA_HOST: ${{ inputs.ollama-host }}
         WAIT_TIMEOUT: ${{ inputs.wait-timeout }}
+        VERSION: ${{ inputs.version }}
+        ARCH: ${{ runner.arch }}
       run: |
         set -euo pipefail
-        echo "📥 Instalando Ollama..."
-        curl -fsSL https://ollama.com/install.sh | sh
 
-        # o install.sh sobe um systemd unit rodando como usuário `ollama`, cujos modelos
-        # vão para /usr/share/ollama/.ollama/models — fora do path cacheado, e a porta
-        # ocupada fazia o nosso `ollama serve` morrer em silêncio. Derruba e assume.
-        sudo systemctl stop ollama 2>/dev/null || true
-        sudo systemctl disable ollama 2>/dev/null || true
+        case "$ARCH" in
+          X64) arch=amd64 ;;
+          ARM64) arch=arm64 ;;
+          *) echo "::error::Arquitetura nao suportada pelo Ollama: $ARCH"; exit 1 ;;
+        esac
 
+        # Binario do release oficial, conferido contra o checksum publicado no mesmo
+        # release. O install.sh (`curl | sh`) rodava como root sem verificar nada e
+        # sempre pegava a versao mais nova, o que tornava o CI nao reproduzivel.
+        echo "📥 Instalando Ollama ${VERSION} (${arch})..."
+        work="$(mktemp -d)"
+        base="https://github.com/ollama/ollama/releases/download/v${VERSION}"
+        tarball="ollama-linux-${arch}.tar.zst"
+        curl -sSfL --retry 3 --retry-delay 2 -o "$work/$tarball" "$base/$tarball"
+        curl -sSfL --retry 3 --retry-delay 2 -o "$work/sha256sum.txt" "$base/sha256sum.txt"
+        # o arquivo lista os nomes como ./nome
+        ( cd "$work" && awk -v t="./$tarball" '$2 == t' sha256sum.txt | sha256sum -c - )
+        sudo tar -C /usr --zstd -xf "$work/$tarball"
+        rm -rf "$work"
+        ollama --version
+
+        # sem o systemd unit do install.sh nao ha servico concorrente: o `ollama serve`
+        # abaixo e o unico dono da porta e do diretorio de modelos
         export OLLAMA_MODELS="$HOME/.ollama/models"
         mkdir -p "$OLLAMA_MODELS"
         echo "OLLAMA_MODELS=$OLLAMA_MODELS" >> "$GITHUB_ENV"
         echo "OLLAMA_HOST=$OLLAMA_HOST" >> "$GITHUB_ENV"
 
+        log="$RUNNER_TEMP/ollama.log"
         echo "🚀 Iniciando serviço Ollama em $OLLAMA_HOST (modelos em $OLLAMA_MODELS)..."
-        nohup ollama serve > /tmp/ollama.log 2>&1 &
+        nohup ollama serve > "$log" 2>&1 &
 
         echo "⏳ Aguardando Ollama estar pronto (máximo ${WAIT_TIMEOUT}s)..."
         if ! timeout "$WAIT_TIMEOUT" bash -c 'until curl -sf "$OLLAMA_HOST/api/tags" >/dev/null; do sleep 1; done'; then
           echo "::error::Timeout: Ollama não respondeu em ${WAIT_TIMEOUT}s"
-          cat /tmp/ollama.log
+          cat "$log"
           exit 1
         fi
         echo "✅ Ollama está pronto!"

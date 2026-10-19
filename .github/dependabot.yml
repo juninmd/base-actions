@@ -17,7 +17,7 @@ updates:
       - /setup-ollama
       - /validate-pr
     schedule:
-      interval: monthly
+      interval: weekly
     groups:
       actions:
         patterns: ['*']

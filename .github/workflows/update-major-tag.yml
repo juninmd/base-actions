@@ -1,0 +1,45 @@
+name: Update major tag
+
+# Mantem a tag movel `v1`, `v2`... apontando para o ultimo release publicado, para
+# os 140+ consumidores poderem usar `@v1` em vez de `@main`. Um commit quebrado no
+# main deixa de propagar na hora: so chega a quem usa a tag depois do release.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-major-tag
+  cancel-in-progress: false
+
+jobs:
+  move-tag:
+    # pre-release nao move a tag que os consumidores seguem
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          # o push da tag abaixo usa a credencial do checkout
+          persist-credentials: true
+
+      - name: Mover a tag major
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::tag de release fora do padrao vMAJOR.MINOR.PATCH: $TAG"; exit 1
+          fi
+          major="${TAG%%.*}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f "$major" "$TAG"
+          git push --force origin "refs/tags/$major"
+          echo "### Tag \`$major\` agora aponta para \`$TAG\`" >> "$GITHUB_STEP_SUMMARY"

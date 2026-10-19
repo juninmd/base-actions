@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
@@ -42,7 +42,7 @@ jobs:
           ./actionlint -color
           rm -f actionlint "$tarball"
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.13'
 
@@ -85,7 +85,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
       # validate-pr pelo caminho local ja e coberto por test-validate-pr-branch.yml
@@ -104,12 +104,12 @@ jobs:
       matrix:
         # pnpm + campo packageManager e o caminho mais fragil (corepack x PATH)
         # e era o unico sem cobertura -- foi onde nasceram os ultimos bugs.
-        pm: [npm, pnpm]
+        pm: [npm, pnpm, yarn]
     steps:
       # fetch-depth: 0 e obrigatorio -- validate-pr varre segredos no intervalo do
       # PR lendo o git local; num clone raso o SHA da base nao existe e o gitleaks
       # aborta com "bad object".
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -138,6 +138,10 @@ jobs:
             pnpm install --lockfile-only
             # sem lockfile o validate-pr cai no caminho npm e esta perna nao prova nada
             [ -f pnpm-lock.yaml ] || { echo "::error::fixture pnpm nao gerou pnpm-lock.yaml"; exit 1; }
+          elif [ "$PM" = "yarn" ]; then
+            yarn install --silent
+            [ -f yarn.lock ] || { echo "::error::fixture yarn nao gerou yarn.lock"; exit 1; }
+            rm -rf node_modules
           else
             npm install --package-lock-only --no-audit --no-fund
             [ -f package-lock.json ] || { echo "::error::fixture npm nao gerou package-lock.json"; exit 1; }
@@ -153,7 +157,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -186,7 +190,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -233,3 +237,45 @@ jobs:
             exit 1
           fi
           echo "gate correto: verde passa, vermelho derruba"
+
+  smoke-lint-blocking:
+    name: Smoke - lint-blocking reprova (e o padrao nao)
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fixture com lint vermelho
+        run: |
+          set -euo pipefail
+          cat > package.json <<'JSON'
+          {
+            "name": "lint-red", "version": "1.0.0", "private": true,
+            "scripts": { "lint": "node -e \"process.exit(1)\"" }
+          }
+          JSON
+          npm install --package-lock-only --no-audit --no-fund
+
+      # padrao: lint e informativo, o gate segue verde
+      - id: default
+        continue-on-error: true
+        uses: ./validate-pr
+
+      - id: blocking
+        continue-on-error: true
+        uses: ./validate-pr
+        with:
+          lint-blocking: 'true'
+
+      - name: Assercao
+        env:
+          DEFAULT: ${{ steps.default.outcome }}
+          BLOCKING: ${{ steps.blocking.outcome }}
+        run: |
+          echo "padrao=$DEFAULT  lint-blocking=$BLOCKING"
+          [ "$DEFAULT" = "success" ] || { echo "::error::lint vermelho nao deveria reprovar por padrao"; exit 1; }
+          [ "$BLOCKING" = "failure" ] || { echo "::error::lint-blocking=true deveria reprovar"; exit 1; }
