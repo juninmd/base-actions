@@ -23,6 +23,16 @@ on:
         required: false
         default: true
         description: false = build-only (útil em PR, valida o Dockerfile sem publicar).
+      provenance:
+        type: boolean
+        required: false
+        default: true
+        description: Attestation de proveniencia (SLSA). Mesmo default da composite.
+      sbom:
+        type: boolean
+        required: false
+        default: false
+        description: Attestation de SBOM. Mesmo default da composite.
       charts-path:
         type: string
         required: false
@@ -36,6 +46,11 @@ on:
         required: true
       CHARTS_TOKEN:
         required: false
+      BUILD_SECRETS:
+        required: false
+        description: >-
+          BuildKit secrets, `id=value` por linha, lidos no Dockerfile com
+          `RUN --mount=type=secret`. Use no lugar de build-args para tokens.
 
 # chaveado pela imagem, nao por github.workflow (que num workflow chamado e o
 # nome do workflow do CALLER e colocaria dois jobs distintos no mesmo grupo).
@@ -51,7 +66,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
       - uses: juninmd/base-actions/docker-build-push@main
@@ -61,7 +76,10 @@ jobs:
           context: ${{ inputs.context }}
           file: ${{ inputs.file }}
           build-args: ${{ inputs.build-args }}
+          secrets: ${{ secrets.BUILD_SECRETS }}
           push: ${{ inputs.push }}
+          provenance: ${{ inputs.provenance }}
+          sbom: ${{ inputs.sbom }}
 
   deploy:
     needs: build
@@ -76,7 +94,7 @@ jobs:
       - name: Guard
         if: env.CHARTS_TOKEN == ''
         run: echo "::warning::CHARTS_TOKEN ausente — pulando auto-deploy (ArgoCD segue na tag atual)"
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         if: env.CHARTS_TOKEN != ''
         with:
           repository: juninmd/app-charts

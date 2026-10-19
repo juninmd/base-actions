@@ -14,6 +14,24 @@ on:
         type: string
         required: false
         default: argocd.antonio-code.duckdns.org
+      require-token:
+        type: boolean
+        required: false
+        default: false
+        description: 'true = ARGOCD_AUTH_TOKEN ausente reprova (padrao: pula com warning).'
+      force:
+        type: boolean
+        required: false
+        default: false
+      prune:
+        type: boolean
+        required: false
+        default: false
+      wait-timeout:
+        type: number
+        required: false
+        default: 0
+        description: 'Segundos esperando Synced/Healthy depois do sync (0 = nao espera).'
     secrets:
       ARGOCD_AUTH_TOKEN:
         required: false
@@ -37,3 +55,7 @@ jobs:
           image-tag: ${{ inputs.image-tag }}
           argocd-server: ${{ inputs.argocd-server }}
           argocd-token: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+          require-token: ${{ inputs.require-token }}
+          force: ${{ inputs.force }}
+          prune: ${{ inputs.prune }}
+          wait-timeout: ${{ inputs.wait-timeout }}

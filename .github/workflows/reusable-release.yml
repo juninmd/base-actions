@@ -18,12 +18,21 @@ on:
         description: 'Personal Access Token'
         required: false
 
+# Sem `permissions:` de proposito: este job precisa de contents: write, e declarar
+# isso num workflow chamado estoura o teto de um caller com token read-only
+# (startup_failure). Quem chama concede `contents: write` no proprio job.
+# Dois pushes seguidos na branch geram tags no mesmo segundo; serializa.
+concurrency:
+  group: release-${{ github.repository }}-${{ inputs.branch }}
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: github.ref == format('refs/heads/{0}', inputs.branch)
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
@@ -44,7 +53,7 @@ jobs:
 
       - name: Create Release
         if: ${{ inputs.generate-release }}
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           tag_name: ${{ steps.tagger.outputs.tag_name }}
           generate_release_notes: true

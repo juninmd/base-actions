@@ -1,10 +1,11 @@
 # 🦙 Setup Ollama Action
 
-GitHub Action reutilizável para configurar Ollama em pipelines de CI/CD, com suporte nativo a cache de modelos usando `actions/cache@v4`.
+GitHub Action reutilizável para configurar Ollama em pipelines de CI/CD, com suporte nativo a cache de modelos usando `actions/cache`.
 
 ## 📋 Funcionalidades
 
-✅ Instala Ollama automaticamente.
+✅ Instala uma versão fixa do Ollama a partir do release oficial, conferindo o `sha256sum.txt` (sem `curl | sh`).
+✅ Somente runners Linux (x64/arm64); em outro SO a action falha com mensagem clara.
 ✅ Inicia o serviço em background.
 ✅ Aguarda ele ficar pronto de forma robusta e inteligente (timeout configurável).
 ✅ Salva/restaura o modelo usando a engine nativa de cache do GitHub Actions (não é necessário passo de cleanup manual).
@@ -23,6 +24,7 @@ Use diretamente apontando para esse repositório `juninmd/base-actions`:
 
 | Input          | Obrigatório | Padrão                   | Descrição                                             |
 | -------------- | ----------- | ------------------------ | ----------------------------------------------------- |
+| `version`      | ❌ Não       | `0.40.6`                 | Versão do Ollama (sem o `v`), validada por checksum   |
 | `model`        | ✅ Sim       | -                        | Nome do modelo Ollama (ex: `gemma3:1b`, `llama3.2`)   |
 | `ollama-host`  | ❌ Não       | `http://localhost:11434` | Host para subir a API do Ollama                       |
 | `wait-timeout` | ❌ Não       | `180`                    | Timeout máximo em segundos para Ollama ficar pronto   |

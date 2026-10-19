@@ -9,6 +9,9 @@ Este script fecha esse buraco:
   2. injecao de script: ${{ <contexto influenciavel> }} dentro de bloco run:
      (checagem sintatica, best-effort: nao segue proveniencia de env)
   3. shellcheck em cada bloco run: (pulado se o binário não existir)
+  4. toda action de terceiro fixada por SHA de commit (tag e mutavel; este repo
+     e consumido por 140+ repos, entao uma tag movida vira supply chain)
+  5. versao do Gitleaks igual nos tres lugares que a declaram
 """
 from __future__ import annotations
 
@@ -19,6 +22,7 @@ import subprocess
 import sys
 import tempfile
 import traceback
+from pathlib import Path
 
 import yaml
 
@@ -40,6 +44,8 @@ UNTRUSTED = re.compile(
 INTERPOLATION = re.compile(r"\$\{\{(.+?)\}\}", re.S)
 INPUT_REF = re.compile(r"inputs\.([a-zA-Z0-9_-]+)")
 SHELLCHECK_IGNORE = "SC2016,SC1091,SC2154,SC2086"
+USES = re.compile(r"^\s*(?:-\s+)?uses:\s*(\S+)", re.M)
+SHA_PIN = re.compile(r"^[^@\s]+@[0-9a-f]{40}$")
 
 errors: list[str] = []
 warnings: list[str] = []
@@ -153,9 +159,45 @@ def check_action(path: str) -> None:
     for unknown in sorted(used - declared):
         errors.append(f"{path}: referencia `inputs.{unknown}` que não está declarado")
     for unused in sorted(declared - used):
+        # input mantido so por compatibilidade de callers: declarar e suficiente
+        if str(declared_raw[unused].get("description", "")).lower().startswith("deprecated"):
+            continue
         warnings.append(f"{path}: input `{unused}` declarado e nunca usado")
 
     shellcheck(path, scripts)
+
+
+def check_pins() -> int:
+    """Actions de terceiros precisam de SHA; locais e do proprio repo ficam de fora."""
+    files = sorted(
+        [*Path(".github/workflows").glob("*.yml"), *Path(".").glob("*/action.yml")]
+    )
+    for path in files:
+        raw = path.read_text(encoding="utf-8")
+        for ref in USES.findall(raw):
+            if ref.startswith("./") or ref.startswith("juninmd/base-actions/"):
+                continue
+            if ref.startswith("docker://") or not SHA_PIN.match(ref):
+                errors.append(f"{path.as_posix()}: `uses: {ref}` nao esta fixado por SHA de commit")
+    return len(files)
+
+
+def check_gitleaks_version() -> None:
+    """Mesma versao nos tres lugares; um bump esquecido testa uma versao e roda outra."""
+    found: dict[str, str] = {}
+    action = yaml.safe_load(Path("security-scan/action.yml").read_text(encoding="utf-8"))
+    found["security-scan/action.yml"] = str(action["inputs"]["gitleaks-version"]["default"])
+    reusable = yaml.safe_load(
+        Path(".github/workflows/reusable-security-scan.yml").read_text(encoding="utf-8")
+    )
+    wf_call = reusable.get("on", reusable.get(True))["workflow_call"]
+    found["reusable-security-scan.yml"] = str(wf_call["inputs"]["gitleaks-version"]["default"])
+    match = re.search(
+        r"^\s*VERSION=(\S+)", Path(".github/workflows/test-gitleaks-config.yml").read_text(encoding="utf-8"), re.M
+    )
+    found["test-gitleaks-config.yml"] = match.group(1) if match else "<nao encontrada>"
+    if len(set(found.values())) != 1:
+        errors.append(f"versao do Gitleaks divergente: {found}")
 
 
 def main() -> int:
@@ -173,6 +215,8 @@ def main() -> int:
         except Exception as exc:  # o CI precisa da annotation, não de um traceback
             errors.append(f"{path}: falha ao analisar ({exc.__class__.__name__}: {exc})")
             traceback.print_exc(file=sys.stderr)
+    check_pins()
+    check_gitleaks_version()
     for w in warnings:
         print(f"::warning::{w}")
     for e in errors:
