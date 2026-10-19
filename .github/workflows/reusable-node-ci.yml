@@ -22,9 +22,14 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
-      
+        with:
+          persist-credentials: false
+
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:

@@ -54,6 +54,8 @@ A composite `docker-build-push` aceita `secrets` (BuildKit, `id=value` por linha
 tokens de registry no build, ex.: `npmrc=//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}`
 com `RUN --mount=type=secret,id=npmrc,target=/root/.npmrc` no Dockerfile. Nunca use
 `build-args` para token: ele fica no historico da imagem.
+O reusable repassa isso via o secret opcional `BUILD_SECRETS` (mesmo formato) e expoe os
+inputs `provenance` (default `true`) e `sbom` (default `false`).
 Cache do buildx e escopado por workflow para os repos nao disputarem a mesma entrada.
 
 ### 3. ArgoCD Sync

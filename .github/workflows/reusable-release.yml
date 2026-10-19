@@ -18,9 +18,18 @@ on:
         description: 'Personal Access Token'
         required: false
 
+# Sem `permissions:` de proposito: este job precisa de contents: write, e declarar
+# isso num workflow chamado estoura o teto de um caller com token read-only
+# (startup_failure). Quem chama concede `contents: write` no proprio job.
+# Dois pushes seguidos na branch geram tags no mesmo segundo; serializa.
+concurrency:
+  group: release-${{ github.repository }}-${{ inputs.branch }}
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: github.ref == format('refs/heads/{0}', inputs.branch)
     steps:
       - uses: actions/checkout@v7
