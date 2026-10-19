@@ -16,6 +16,18 @@ inputs:
     description: pnpm version
     required: false
     default: 'latest'
+  lint-blocking:
+    description: >-
+      true = falha do lint (eslint/ruff) reprova o gate. O padrao false mantem o
+      lint informativo (warning), como sempre foi.
+    required: false
+    default: 'false'
+  strict-install:
+    description: >-
+      true = lockfile desatualizado reprova em vez de cair no install nao-frozen.
+      O padrao false mantem o fallback com warning.
+    required: false
+    default: 'false'
 
 runs:
   using: composite
@@ -69,6 +81,7 @@ runs:
 
     # ─── Version Detection ─────────────────────────────
     - name: Detect Runtime Versions
+      id: detect
       shell: bash
       env:
         NODE_VERSION_INPUT: ${{ inputs.node-version }}
@@ -77,30 +90,59 @@ runs:
         NODE_VER="$NODE_VERSION_INPUT"
         PYTHON_VER="$PYTHON_VERSION_INPUT"
         if [ -f ".nvmrc" ]; then
-          NODE_VER=$(cat .nvmrc | tr -d 'v \n\r')
+          NODE_VER=$(tr -d 'v \n\r' < .nvmrc)
         elif [ -f ".node-version" ]; then
-          NODE_VER=$(cat .node-version | tr -d 'v \n\r')
+          NODE_VER=$(tr -d 'v \n\r' < .node-version)
         elif [ -f "package.json" ]; then
           if grep -q -E '"typescript":\s*"~2\.' package.json || grep -q -E '"@angular/core":\s*"4\.' package.json || grep -q -E '"@ionic/app-scripts"' package.json; then
             NODE_VER="10"
           fi
         fi
         if [ -f ".python-version" ]; then
-          PYTHON_VER=$(cat .python-version | tr -d ' \n\r')
+          PYTHON_VER=$(tr -d ' \n\r' < .python-version)
         elif [ -f "requirements.txt" ] && grep -i -E "realtimetts|realtimestt|realtime-tts|coqui" requirements.txt >/dev/null; then
           PYTHON_VER="3.11"
         fi
-        echo "NODE_VERSION_DETECTED=$NODE_VER" >> $GITHUB_ENV
-        echo "PYTHON_VERSION_DETECTED=$PYTHON_VER" >> $GITHUB_ENV
-        echo "::notice::Detected Node.js version: $NODE_VER"
+
+        # gerenciador de pacotes: decidido uma vez aqui, os passos Node so leem
+        PM=npm
+        if [ -f "pnpm-lock.yaml" ]; then PM=pnpm
+        elif [ -f "yarn.lock" ]; then PM=yarn
+        fi
+        # cache nativo do setup-node so para npm: pnpm/yarn precisam do binario
+        # antes do setup-node, e o pnpm tem cache proprio mais abaixo
+        NPM_CACHE=""
+        if [ "$PM" = npm ] && [ -f "package-lock.json" ]; then NPM_CACHE=npm; fi
+
+        {
+          echo "NODE_VERSION_DETECTED=$NODE_VER"
+          echo "PYTHON_VERSION_DETECTED=$PYTHON_VER"
+        } >> "$GITHUB_ENV"
+        {
+          echo "pm=$PM"
+          echo "npm-cache=$NPM_CACHE"
+        } >> "$GITHUB_OUTPUT"
+        echo "::notice::Detected Node.js version: $NODE_VER (pm: $PM)"
         echo "::notice::Detected Python version: $PYTHON_VER"
 
     # ─── Node.js ──────────────────────────────────────
     - name: Setup Node.js
       if: hashFiles('package.json') != ''
-      uses: actions/setup-node@v7
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
       with:
         node-version: ${{ env.NODE_VERSION_DETECTED }}
+        cache: ${{ steps.detect.outputs.npm-cache }}
+
+    # Node >= 17 removeu o provider OpenSSL legado; projetos antigos (webpack 4 etc.)
+    # precisam da flag. Decidido uma vez, vale para todos os passos seguintes.
+    - name: Configurar NODE_OPTIONS
+      if: hashFiles('package.json') != ''
+      shell: bash
+      run: |
+        NODE_MAJOR=$(node -v | cut -d'.' -f1 | tr -d 'v')
+        if [ "$NODE_MAJOR" -ge 17 ] 2>/dev/null; then
+          echo "NODE_OPTIONS=--openssl-legacy-provider" >> "$GITHUB_ENV"
+        fi
 
     - name: Check packageManager field
       id: check-pm
@@ -115,7 +157,7 @@ runs:
 
     - name: Setup pnpm (legacy, via action)
       if: hashFiles('pnpm-lock.yaml') != '' && steps.check-pm.outputs.has-package-manager != 'true'
-      uses: pnpm/action-setup@v6
+      uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       with:
         version: ${{ inputs.pnpm-version }}
 
@@ -127,61 +169,88 @@ runs:
       shell: bash
       run: corepack enable
 
+    - name: Resolver store do pnpm
+      id: pnpm-store
+      if: hashFiles('pnpm-lock.yaml') != ''
+      shell: bash
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache do store do pnpm
+      if: hashFiles('pnpm-lock.yaml') != ''
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: ${{ steps.pnpm-store.outputs.path }}
+        key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: |
+          pnpm-store-${{ runner.os }}-
+
     - name: Install Node dependencies
       if: hashFiles('package.json') != ''
       shell: bash
+      env:
+        PM: ${{ steps.detect.outputs.pm }}
+        STRICT_INSTALL: ${{ inputs.strict-install }}
       run: |
-        NODE_MAJOR=$(node -v | cut -d'.' -f1 | tr -d 'v' || echo "22")
-        if [ "$NODE_MAJOR" -ge 17 ] 2>/dev/null; then
-          export NODE_OPTIONS="--openssl-legacy-provider"
-        fi
-        if [ -f "pnpm-lock.yaml" ]; then
-          # strictDepBuilds=false: build scripts não-revisados viram warning (não são executados), sem travar o gate (pnpm 10.3+)
-          pnpm install --frozen-lockfile --config.strictDepBuilds=false || { echo "::warning::pnpm-lock.yaml desatualizado — fallback para install não-frozen"; pnpm install --no-frozen-lockfile --config.strictDepBuilds=false; }
-        elif [ -f "yarn.lock" ]; then
-          yarn install --frozen-lockfile || yarn install
-        elif [ -f "package-lock.json" ]; then
-          npm ci --legacy-peer-deps || { echo "::warning::package-lock.json desatualizado — fallback para npm install"; npm install --legacy-peer-deps; }
-        else
-          npm install --legacy-peer-deps || npm install
-        fi
+        set -uo pipefail
+        # install estrito = lockfile desatualizado reprova; o padrao tolera (warning)
+        # para nao quebrar quem ja depende do fallback
+        fallback() {
+          if [ "$STRICT_INSTALL" = "true" ]; then
+            echo "::error::$1 desatualizado e strict-install=true"; exit 1
+          fi
+          echo "::warning::$1 desatualizado — fallback para install não-frozen"
+        }
+        case "$PM" in
+          pnpm)
+            # strictDepBuilds=false: build scripts não-revisados viram warning (não são executados), sem travar o gate (pnpm 10.3+)
+            pnpm install --frozen-lockfile --config.strictDepBuilds=false || { fallback pnpm-lock.yaml; pnpm install --no-frozen-lockfile --config.strictDepBuilds=false; } ;;
+          yarn)
+            yarn install --frozen-lockfile || { fallback yarn.lock; yarn install; } ;;
+          *)
+            if [ -f "package-lock.json" ]; then
+              npm ci --legacy-peer-deps || { fallback package-lock.json; npm install --legacy-peer-deps; }
+            else
+              npm install --legacy-peer-deps || npm install
+            fi ;;
+        esac
 
     - name: Build Node
       if: hashFiles('package.json') != ''
       shell: bash
+      env:
+        PM: ${{ steps.detect.outputs.pm }}
       run: |
-        NODE_MAJOR=$(node -v | cut -d'.' -f1 | tr -d 'v' || echo "22")
-        if [ "$NODE_MAJOR" -ge 17 ] 2>/dev/null; then
-          export NODE_OPTIONS="--openssl-legacy-provider"
-        fi
-        if [ -f "pnpm-lock.yaml" ]; then
-          pnpm run --if-present build
+        set -uo pipefail
+        # --if-present so existe no `npm run`; para pnpm/yarn a checagem e explicita
+        if node -e "process.exit(require('./package.json').scripts?.build ? 0 : 1)"; then
+          "$PM" run build
         else
-          npm run build --if-present
+          echo "::notice::Sem script \"build\" no package.json — etapa pulada"
         fi
 
     - name: Lint Node
       if: hashFiles('package.json') != ''
       shell: bash
+      env:
+        PM: ${{ steps.detect.outputs.pm }}
+        LINT_BLOCKING: ${{ inputs.lint-blocking }}
       run: |
-        NODE_MAJOR=$(node -v | cut -d'.' -f1 | tr -d 'v' || echo "22")
-        if [ "$NODE_MAJOR" -ge 17 ] 2>/dev/null; then
-          export NODE_OPTIONS="--openssl-legacy-provider"
+        set -uo pipefail
+        if ! node -e "process.exit(require('./package.json').scripts?.lint ? 0 : 1)"; then
+          echo "::notice::Sem script \"lint\" no package.json — etapa pulada"; exit 0
         fi
-        if [ -f "pnpm-lock.yaml" ]; then
-          pnpm run --if-present lint || echo "::warning::Lint failed (non-blocking)"
-        else
-          npm run lint --if-present || echo "::warning::Lint failed (non-blocking)"
+        if "$PM" run lint; then exit 0; fi
+        if [ "$LINT_BLOCKING" = "true" ]; then
+          echo "::error::Lint falhou (lint-blocking=true)"; exit 1
         fi
+        echo "::warning::Lint failed (non-blocking)"
 
     - name: Test Node
       if: hashFiles('package.json') != ''
       shell: bash
+      env:
+        PM: ${{ steps.detect.outputs.pm }}
       run: |
-        NODE_MAJOR=$(node -v | cut -d'.' -f1 | tr -d 'v' || echo "22")
-        if [ "$NODE_MAJOR" -ge 17 ] 2>/dev/null; then
-          export NODE_OPTIONS="--openssl-legacy-provider"
-        fi
         # le o script direto do package.json: `npm test --if-present` nao e confiavel
         # (--if-present e flag de `npm run`) e o stub padrao do npm sai com erro.
         script=$(node -p "try{require('./package.json').scripts.test||''}catch(e){''}")
@@ -192,21 +261,18 @@ runs:
           *"no test specified"*)
             echo "::warning::Script de teste e o stub padrao do npm — nenhum teste roda"; exit 0 ;;
         esac
-        if [ -f "pnpm-lock.yaml" ]; then pnpm test
-        elif [ -f "yarn.lock" ]; then yarn test
-        else npm test
-        fi
+        "$PM" test
 
     # ─── Python ───────────────────────────────────────
     - name: Setup uv
       if: hashFiles('pyproject.toml') != '' || hashFiles('uv.lock') != ''
-      uses: astral-sh/setup-uv@v10.2.0
+      uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       with:
         python-version: ${{ env.PYTHON_VERSION_DETECTED }}
 
     - name: Setup Python
       if: (hashFiles('pyproject.toml') != '' || hashFiles('requirements.txt') != '') && hashFiles('uv.lock') == ''
-      uses: actions/setup-python@v7
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
       with:
         python-version: ${{ env.PYTHON_VERSION_DETECTED }}
 
@@ -214,10 +280,23 @@ runs:
       if: hashFiles('pyproject.toml') != '' || hashFiles('requirements.txt') != ''
       shell: bash
       run: |
+        set -uo pipefail
         if [ -f "uv.lock" ]; then
           uv sync
         elif [ -f "pyproject.toml" ]; then
-          pip install .[dev,test] 2>/dev/null || pip install .[dev] 2>/dev/null || pip install .
+          # extras ausentes so geram aviso no pip; cada tentativa guarda a propria
+          # saida e a ultima aparece inteira se nenhuma instalar (antes ia p/ /dev/null)
+          last=""
+          for target in '.[dev,test]' '.[dev]' '.'; do
+            if last=$(pip install "$target" 2>&1); then
+              echo "$last" | tail -n 3
+              exit 0
+            fi
+            echo "::notice::pip install $target falhou — tentando a proxima opcao"
+          done
+          echo "$last"
+          echo "::error::nao foi possivel instalar o projeto Python"
+          exit 1
         elif [ -f "requirements.txt" ]; then
           pip install -r requirements.txt
         fi
@@ -225,14 +304,22 @@ runs:
     - name: Lint Python
       if: hashFiles('pyproject.toml') != '' || hashFiles('uv.lock') != ''
       shell: bash
+      env:
+        LINT_BLOCKING: ${{ inputs.lint-blocking }}
       run: |
-        # lint e informativo (mesmo criterio do Node): reporta, nao bloqueia
+        set -uo pipefail
+        # lint e informativo por padrao (mesmo criterio do Node); lint-blocking=true reprova
         if [ -f "uv.lock" ]; then
-          uv run ruff check . || echo "::warning::ruff reportou problemas (non-blocking)"
+          RUFF=(uv run ruff)
         else
           pip install --quiet ruff || { echo "::warning::ruff indisponivel"; exit 0; }
-          ruff check . || echo "::warning::ruff reportou problemas (non-blocking)"
+          RUFF=(ruff)
         fi
+        if "${RUFF[@]}" check .; then exit 0; fi
+        if [ "$LINT_BLOCKING" = "true" ]; then
+          echo "::error::ruff reportou problemas (lint-blocking=true)"; exit 1
+        fi
+        echo "::warning::ruff reportou problemas (non-blocking)"
 
     - name: Test Python
       if: hashFiles('pyproject.toml') != '' || hashFiles('uv.lock') != ''
@@ -264,7 +351,7 @@ runs:
     # ─── Helm / K8s ───────────────────────────────────
     - name: Install Helm
       if: hashFiles('**/Chart.yaml') != ''
-      uses: azure/setup-helm@v5
+      uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
 
     - name: Lint Helm Charts
       if: hashFiles('**/Chart.yaml') != ''

@@ -16,13 +16,36 @@ inputs:
   argocd-token:
     description: >-
       ArgoCD API token. Se vazio, cai no env ARGOCD_AUTH_TOKEN (compatibilidade).
-      Sem token o passo é pulado (ArgoCD auto-sync assume).
+      Sem token o passo é pulado (ArgoCD auto-sync assume), a menos que
+      require-token seja true.
     required: false
     default: ''
-  force:
-    description: Enviar force=true no sync
+  require-token:
+    description: >-
+      true = token ausente reprova o job. Use quando o sync e a unica forma de o
+      deploy acontecer: um typo no nome do secret deixaria o job verde sem deploy.
     required: false
-    default: 'true'
+    default: 'false'
+  revision:
+    description: Revisao a sincronizar
+    required: false
+    default: HEAD
+  force:
+    description: >-
+      Enviar force=true no sync. Recria recursos com campos imutaveis; so ligue
+      quando o sync normal falhar por isso.
+    required: false
+    default: 'false'
+  prune:
+    description: Enviar prune=true no sync (remove recursos que sairam do git)
+    required: false
+    default: 'false'
+  wait-timeout:
+    description: >-
+      Segundos esperando a app ficar Synced e Healthy depois do sync. 0 = nao
+      espera (so dispara, como sempre foi).
+    required: false
+    default: '0'
   fail-on-error:
     description: Falhar o job quando o sync retornar erro (recomendado)
     required: false
@@ -41,39 +64,81 @@ runs:
       env:
         ARGOCD_SERVER: ${{ inputs.argocd-server }}
         ARGOCD_TOKEN_INPUT: ${{ inputs.argocd-token }}
+        REQUIRE_TOKEN: ${{ inputs.require-token }}
         APP_NAME: ${{ inputs.app-name }}
         IMAGE_TAG: ${{ inputs.image-tag }}
+        REVISION: ${{ inputs.revision }}
         FORCE: ${{ inputs.force }}
+        PRUNE: ${{ inputs.prune }}
+        WAIT_TIMEOUT: ${{ inputs.wait-timeout }}
         FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
       run: |
         set -uo pipefail
+
+        # fail-on-error=false rebaixa qualquer falha de sync/espera para warning
+        fail() {
+          echo "::error::$1"
+          if [ "$FAIL_ON_ERROR" = "true" ]; then exit 1; fi
+          echo "::warning::fail-on-error=false — seguindo mesmo com falha"
+          exit 0
+        }
+
         TOKEN="${ARGOCD_TOKEN_INPUT:-${ARGOCD_AUTH_TOKEN:-}}"
         if [ -z "$TOKEN" ]; then
+          if [ "$REQUIRE_TOKEN" = "true" ]; then
+            echo "::error::ARGOCD token ausente e require-token=true"; exit 1
+          fi
           echo "::warning::ARGOCD token ausente — sync pulado (ArgoCD auto-sync ativo)"
           exit 0
         fi
 
-        case "$FORCE" in
-          true|false) ;;
-          *) echo "::error::input 'force' deve ser true ou false (recebido: $FORCE)"; exit 1 ;;
+        for flag in FORCE PRUNE; do
+          case "${!flag}" in
+            true|false) ;;
+            *) echo "::error::input '${flag,,}' deve ser true ou false (recebido: ${!flag})"; exit 1 ;;
+          esac
+        done
+        case "$WAIT_TIMEOUT" in
+          ''|*[!0-9]*) echo "::error::input 'wait-timeout' deve ser inteiro em segundos (recebido: $WAIT_TIMEOUT)"; exit 1 ;;
         esac
 
-        echo "🚀 Sync ${APP_NAME} (tag: ${IMAGE_TAG}) em ${ARGOCD_SERVER}"
+        api="https://${ARGOCD_SERVER}/api/v1/applications/${APP_NAME}"
+        payload=$(jq -n --arg rev "$REVISION" --argjson force "$FORCE" --argjson prune "$PRUNE" \
+          '{revision: $rev, prune: $prune, force: $force}')
+
+        echo "🚀 Sync ${APP_NAME} (tag: ${IMAGE_TAG}, revision: ${REVISION}, force: ${FORCE}, prune: ${PRUNE}) em ${ARGOCD_SERVER}"
         body=$(mktemp)
         code=$(curl -s -o "$body" -w '%{http_code}' --max-time 60 --retry 2 --retry-delay 5 \
-          -X POST "https://${ARGOCD_SERVER}/api/v1/applications/${APP_NAME}/sync" \
+          -X POST "${api}/sync" \
           -H "Authorization: Bearer ${TOKEN}" \
           -H "Content-Type: application/json" \
-          -d "{\"revision\":\"HEAD\",\"prune\":false,\"force\":${FORCE}}") || code=000
+          -d "$payload") || code=000
 
-        if [ "$code" = "200" ]; then
-          echo "✅ ArgoCD sync disparado para ${APP_NAME}"
-          exit 0
+        if [ "$code" != "200" ]; then
+          # o corpo do erro do ArgoCD não carrega o token, mas pode carregar detalhes do app
+          head -c 500 "$body" || true
+          echo
+          fail "ArgoCD sync falhou para ${APP_NAME} (HTTP ${code})"
         fi
+        echo "✅ ArgoCD sync disparado para ${APP_NAME}"
 
-        # o corpo do erro do ArgoCD não carrega o token, mas pode carregar detalhes do app
-        echo "::error::ArgoCD sync falhou para ${APP_NAME} (HTTP ${code})"
-        head -c 500 "$body" || true
-        echo
-        if [ "$FAIL_ON_ERROR" = "true" ]; then exit 1; fi
-        echo "::warning::fail-on-error=false — seguindo mesmo com sync falho"
+        [ "$WAIT_TIMEOUT" -gt 0 ] || exit 0
+
+        echo "⏳ Aguardando ${APP_NAME} ficar Synced e Healthy (máximo ${WAIT_TIMEOUT}s)..."
+        deadline=$(( SECONDS + WAIT_TIMEOUT ))
+        while :; do
+          state=$(curl -s --max-time 30 -H "Authorization: Bearer ${TOKEN}" "$api" \
+            | jq -r '[.status.sync.status // "?", .status.health.status // "?", .status.operationState.phase // "?"] | join(" ")') || state="? ? ?"
+          read -r sync health phase <<<"$state"
+          echo "   sync=${sync} health=${health} operation=${phase}"
+          case "$phase" in
+            Failed|Error) fail "operação de sync de ${APP_NAME} terminou em ${phase}" ;;
+          esac
+          if [ "$sync" = "Synced" ] && [ "$health" = "Healthy" ]; then
+            echo "✅ ${APP_NAME} Synced e Healthy"; exit 0
+          fi
+          if [ "$SECONDS" -ge "$deadline" ]; then
+            fail "${APP_NAME} não ficou Synced/Healthy em ${WAIT_TIMEOUT}s (sync=${sync}, health=${health})"
+          fi
+          sleep 5
+        done

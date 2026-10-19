@@ -10,6 +10,13 @@ Central repository for standardizing GitHub Actions workflows across all **junin
 - **Commit Lint**: Conventional Commits validation for PRs and pushes.
 - **Node CI**: pnpm typecheck, build and lint.
 - **Release & Tagging**: Date-based tag generation plus GitHub release notes.
+- **Quality Check / Security Scan / Setup Node+pnpm / Setup Ollama**: composite actions avulsas (ver [Composite actions avulsas](#-composite-actions-avulsas)).
+
+## 📌 Versionamento
+
+Ao publicar um release `vX.Y.Z`, o workflow `update-major-tag` move a tag `vX`. Prefira
+`@v1` a `@main`: um commit quebrado no `main` so chega a voce no proximo release.
+Toda action de terceiro usada aqui e fixada por SHA de commit.
 
 ## 🛠 Usage
 
@@ -24,8 +31,13 @@ jobs:
   check:
     uses: juninmd/base-actions/.github/workflows/reusable-validate.yml@main
     with:
-      node-version: '22' # Optional
+      node-version: '22'       # Optional
+      lint-blocking: false     # true = falha de lint reprova o gate (padrao: so warning)
+      strict-install: false    # true = lockfile desatualizado reprova (padrao: fallback com warning)
 ```
+
+Suporta npm, pnpm e yarn (detectado pelo lockfile) e Python (uv/pip). O cache de
+dependencias e automatico (npm via `setup-node`, pnpm via store).
 
 ### 2. Docker Build & Push
 Add this to `.github/workflows/build.yml`:
@@ -46,6 +58,7 @@ jobs:
     secrets:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CHARTS_TOKEN: ${{ secrets.CHARTS_TOKEN }}         # opcional
+      BUILD_SECRETS: ${{ format('npmrc=//npm.pkg.github.com/:_authToken={0}', secrets.GITHUB_TOKEN) }}  # opcional
 ```
 
 Tags publicadas: `latest` (somente na branch default) e o SHA completo do commit.
@@ -56,7 +69,8 @@ com `RUN --mount=type=secret,id=npmrc,target=/root/.npmrc` no Dockerfile. Nunca 
 `build-args` para token: ele fica no historico da imagem.
 O reusable repassa isso via o secret opcional `BUILD_SECRETS` (mesmo formato) e expoe os
 inputs `provenance` (default `true`) e `sbom` (default `false`).
-Cache do buildx e escopado por workflow para os repos nao disputarem a mesma entrada.
+Cache do buildx e escopado por workflow + imagem, para duas imagens do mesmo repo nao
+disputarem a mesma entrada.
 
 ### 3. ArgoCD Sync
 Add this to `.github/workflows/deploy.yml`:
@@ -77,6 +91,10 @@ jobs:
     secrets:
       ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
 ```
+
+Opcoes (todas com default conservador): `require-token: true` reprova quando o secret
+nao chega (padrao: pula com warning), `force`/`prune` (padrao `false`) e
+`wait-timeout: 300` espera a app ficar Synced e Healthy (padrao `0`: so dispara).
 
 ### 4. Commit Lint
 Add this to `.github/workflows/commit-lint.yml`:
@@ -121,6 +139,27 @@ jobs:
     secrets:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+## 🧩 Composite actions avulsas
+
+| Action | Para que serve |
+|---|---|
+| `security-scan` | Gitleaks (binario com checksum e cache) no historico completo ou num intervalo `base..head` |
+| `quality-check` | Lint e testes com pnpm; script ausente e erro de configuracao, nao sucesso |
+| `setup-node-pnpm` | Node + pnpm (corepack quando ha `packageManager`) e install com cache |
+| `setup-ollama` | Ollama em versao fixa (checksum) + modelo em cache; so Linux |
+
+```yaml
+- uses: juninmd/base-actions/security-scan@main
+- uses: juninmd/base-actions/setup-ollama@main
+  with:
+    model: gemma3:1b
+```
+
+## 🛠 Desenvolvimento
+
+`make lint` roda os mesmos gates do CI (actionlint + `lint-actions.py`). Veja
+[CONTRIBUTING.md](CONTRIBUTING.md) e [SECURITY.md](SECURITY.md).
 
 ## 🔐 Permissoes exigidas do repositorio chamador
 
