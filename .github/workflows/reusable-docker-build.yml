@@ -44,7 +44,7 @@ on:
     secrets:
       GH_TOKEN:
         required: false
-        description: Token para push no GHCR (default: GITHUB_TOKEN do caller)
+        description: 'Token para push no GHCR (default: GITHUB_TOKEN do caller)'
       CHARTS_TOKEN:
         required: false
       BUILD_SECRETS:
