@@ -1,0 +1,76 @@
+name: Reusable Release Drafter
+
+on:
+  workflow_call:
+    inputs:
+      config-name:
+        type: string
+        required: false
+        default: release-drafter.yml
+        description: Nome do arquivo de config dentro de .github/ do caller
+      ensure-labels:
+        type: boolean
+        required: false
+        default: true
+        description: Garante que as labels padrao existem antes de rodar o autolabeler
+
+concurrency:
+  group: release-drafter-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  draft:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Garantir que as labels existem
+        if: inputs.ensure-labels
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          while IFS='|' read -r name color; do
+            [ -n "$name" ] || continue
+            if err=$(gh label create "$name" --color "$color" 2>&1); then
+              echo "label '$name' criada"
+            elif printf '%s' "$err" | grep -qi 'already exists'; then
+              echo "label '$name' ja existe"
+            else
+              echo "::error::falha ao criar label '$name': $err"
+              exit 1
+            fi
+          done <<'LABELS'
+          feature|0e8a16
+          enhancement|0e8a16
+          fix|d73a4a
+          bug|d73a4a
+          security|b60205
+          dependencies|0366d6
+          docs|0075ca
+          ci|c5def5
+          refactor|fbca04
+          chore|ededed
+          breaking|b60205
+          skip-changelog|ededed
+          LABELS
+
+      - uses: release-drafter/release-drafter@978bb0b30c5ee8cdd332ced253758157150d43f0 # v7
+        with:
+          config-name: ${{ inputs.config-name }}
+          disable-autolabeler: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  autolabel:
+    if: github.event_name == 'pull_request_target' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: release-drafter/release-drafter@978bb0b30c5ee8cdd332ced253758157150d43f0 # v7
+        with:
+          config-name: ${{ inputs.config-name }}
+          disable-releaser: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -43,7 +43,8 @@ on:
           committed back so ArgoCD auto-sync rolls it out. Empty = build only.
     secrets:
       GH_TOKEN:
-        required: true
+        required: false
+        description: Token para push no GHCR (default: GITHUB_TOKEN do caller)
       CHARTS_TOKEN:
         required: false
       BUILD_SECRETS:
@@ -72,7 +73,7 @@ jobs:
       - uses: juninmd/base-actions/docker-build-push@main
         with:
           image-name: ${{ inputs.image-name }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
           context: ${{ inputs.context }}
           file: ${{ inputs.file }}
           build-args: ${{ inputs.build-args }}

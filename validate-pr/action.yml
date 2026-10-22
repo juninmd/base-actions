@@ -108,6 +108,7 @@ runs:
         PM=npm
         if [ -f "pnpm-lock.yaml" ]; then PM=pnpm
         elif [ -f "yarn.lock" ]; then PM=yarn
+        elif [ -f "bun.lockb" ] || [ -f "bun.lock" ]; then PM=bun
         fi
         # cache nativo do setup-node so para npm: pnpm/yarn precisam do binario
         # antes do setup-node, e o pnpm tem cache proprio mais abaixo
@@ -184,6 +185,10 @@ runs:
         restore-keys: |
           pnpm-store-${{ runner.os }}-
 
+    - name: Setup Bun
+      if: hashFiles('bun.lockb', 'bun.lock') != ''
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+
     - name: Install Node dependencies
       if: hashFiles('package.json') != ''
       shell: bash
@@ -201,6 +206,8 @@ runs:
           echo "::warning::$1 desatualizado — fallback para install não-frozen"
         }
         case "$PM" in
+          bun)
+            bun install --frozen-lockfile || { fallback "bun.lock"; bun install; } ;;
           pnpm)
             # strictDepBuilds=false: build scripts não-revisados viram warning (não são executados), sem travar o gate (pnpm 10.3+)
             pnpm install --frozen-lockfile --config.strictDepBuilds=false || { fallback pnpm-lock.yaml; pnpm install --no-frozen-lockfile --config.strictDepBuilds=false; } ;;
