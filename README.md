@@ -36,7 +36,7 @@ jobs:
       strict-install: false    # true = lockfile desatualizado reprova (padrao: fallback com warning)
       audit: true              # true = executa auditoria de vulnerabilidades (padrao: true)
       audit-level: 'high'      # nivel minimo de severidade (low, moderate, high, critical) (padrao: high)
-      audit-blocking: true     # true = vulnerabilidade reprova o gate (padrao: true)
+      audit-blocking: false    # true = vulnerabilidade reprova o gate (padrao: false)
 ```
 
 Suporta npm, pnpm e yarn (detectado pelo lockfile) e Python (uv/pip). O cache de

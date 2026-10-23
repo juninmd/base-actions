@@ -41,9 +41,10 @@ inputs:
     default: 'high'
   audit-blocking:
     description: >-
-      true = vulnerabilidade encontrada reprova o gate. Padrao true.
+      true = vulnerabilidade encontrada reprova o gate. O padrao false mantem o
+      audit informativo (warning), como o lint e strict-install.
     required: false
-    default: 'true'
+    default: 'false'
 
 runs:
   using: composite
@@ -300,7 +301,20 @@ runs:
               audit_failed=true
             fi ;;
           yarn)
-            if ! yarn audit --level "$AUDIT_LEVEL"; then
+            # Yarn v1 audit exits with a bitmask: 1=info, 2=low, 4=moderate, 8=high, 16=critical
+            # Yarn ignores --level for exit code, so calculate mask according to AUDIT_LEVEL
+            mask=0
+            case "$AUDIT_LEVEL" in
+              info) mask=31 ;;
+              low) mask=30 ;;
+              moderate) mask=28 ;;
+              high) mask=24 ;;
+              critical) mask=16 ;;
+              *) mask=24 ;;
+            esac
+            yarn_status=0
+            yarn audit --level "$AUDIT_LEVEL" || yarn_status=$?
+            if [ $((yarn_status & mask)) -ne 0 ]; then
               audit_failed=true
             fi ;;
           bun)
