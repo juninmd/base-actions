@@ -55,6 +55,10 @@ jobs:
           pip install --quiet pyyaml
           python .github/scripts/lint-actions.py
 
+      # Pina o gate de segredos do validate-pr: exceção de fixture e rejeição de .env/.pem/.key.
+      - name: Regression do gate de segredos (validate-pr)
+        run: python .github/scripts/test-validate-pr-secrets.py
+
   # O bug que este repo mais repetiu foi startup_failure em reusable workflow: o run
   # morre sem job e sem anotacao, entao o gate PARECE existir e nunca roda. Chamar o
   # proprio reusable a partir do CI reproduz isso na hora. Cobre `with:` e
