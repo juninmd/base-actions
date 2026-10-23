@@ -60,6 +60,14 @@ jobs:
         run: python .github/scripts/test-validate-pr-secrets.py
 
       # `node -e` roda no Node 10 (detectado p/ projetos Angular 2): `?.` ali falha em silencio.
+      # `"$PM" test` sem `run` pega o runner nativo do Bun e ignora o script do projeto.
+      - name: Teste do validate-pr sempre via script (run test)
+        run: |
+          if grep -rnE --include=action.yml 'PM" test\b' .; then
+            echo "::error::use \"\$PM\" run test: 'bun test' ignora o script do package.json"
+            exit 1
+          fi
+
       - name: Sem optional chaining em node -e (Node 10)
         run: |
           if grep -rnE --include=action.yml 'node -e .*\?\.' .; then

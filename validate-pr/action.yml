@@ -279,7 +279,8 @@ runs:
           echo "::notice::Detectado Playwright — instalando navegadores"
           npx playwright install --with-deps chromium 2>/dev/null || npx playwright install chromium 2>/dev/null || true
         fi
-        "$PM" test
+        # `run` obrigatorio: `bun test` e o runner nativo do Bun e ignora o script do package.json
+        "$PM" run test
 
     - name: Audit Node dependencies
       if: inputs.audit == 'true' && hashFiles('package.json') != ''
