@@ -28,6 +28,22 @@ inputs:
       O padrao false mantem o fallback com warning.
     required: false
     default: 'false'
+  audit:
+    description: >-
+      true = executa auditoria de seguranca de dependencias (npm/pnpm/yarn/bun, Python, Go, Rust).
+      Padrao true.
+    required: false
+    default: 'true'
+  audit-level:
+    description: >-
+      Nivel minimo de severidade para auditoria (low, moderate, high, critical). Padrao high.
+    required: false
+    default: 'high'
+  audit-blocking:
+    description: >-
+      true = vulnerabilidade encontrada reprova o gate. O padrao false emite warning informativo.
+    required: false
+    default: 'false'
 
 runs:
   using: composite
@@ -264,6 +280,57 @@ runs:
         fi
         "$PM" test
 
+    - name: Audit Node dependencies
+      if: inputs.audit == 'true' && hashFiles('package.json') != ''
+      shell: bash
+      env:
+        PM: ${{ steps.detect.outputs.pm }}
+        AUDIT_LEVEL: ${{ inputs.audit-level }}
+        AUDIT_BLOCKING: ${{ inputs.audit-blocking }}
+      run: |
+        set -uo pipefail
+        echo "::group::Auditando dependencias Node ($PM, nivel: $AUDIT_LEVEL)..."
+        audit_failed=false
+
+        case "$PM" in
+          pnpm)
+            if ! pnpm audit --audit-level "$AUDIT_LEVEL"; then
+              audit_failed=true
+            fi ;;
+          yarn)
+            if ! yarn audit --level "$AUDIT_LEVEL"; then
+              audit_failed=true
+            fi ;;
+          bun)
+            if bun audit --help >/dev/null 2>&1; then
+              if ! bun audit; then audit_failed=true; fi
+            elif [ -f "package-lock.json" ]; then
+              if ! npm audit --audit-level="$AUDIT_LEVEL"; then audit_failed=true; fi
+            else
+              echo "::notice::Audit nativo nao disponivel para bun sem lockfile padrao"
+            fi ;;
+          *)
+            if [ -f "package-lock.json" ]; then
+              if ! npm audit --audit-level="$AUDIT_LEVEL"; then
+                audit_failed=true
+              fi
+            else
+              echo "::notice::package-lock.json ausente — pulando npm audit"
+            fi ;;
+        esac
+        echo "::endgroup::"
+
+        if [ "$audit_failed" = "true" ]; then
+          if [ "$AUDIT_BLOCKING" = "true" ]; then
+            echo "::error::Vulnerabilidades encontradas nas dependencias Node (nivel: $AUDIT_LEVEL, audit-blocking=true)"
+            exit 1
+          else
+            echo "::warning::Vulnerabilidades encontradas nas dependencias Node (nivel: $AUDIT_LEVEL)"
+          fi
+        else
+          echo "Audit de dependencias Node concluido sem vulnerabilidades >= $AUDIT_LEVEL"
+        fi
+
     # ─── Python ───────────────────────────────────────
     - name: Setup uv
       if: hashFiles('pyproject.toml') != '' || hashFiles('uv.lock') != ''
@@ -348,6 +415,107 @@ runs:
           5) echo "::notice::Nenhum teste Python coletado — etapa pulada" ;;
           *) echo "::error::Testes Python falharam (pytest exit ${ec})"; exit "$ec" ;;
         esac
+
+    - name: Audit Python dependencies
+      if: inputs.audit == 'true' && (hashFiles('pyproject.toml') != '' || hashFiles('requirements.txt') != '')
+      shell: bash
+      env:
+        AUDIT_LEVEL: ${{ inputs.audit-level }}
+        AUDIT_BLOCKING: ${{ inputs.audit-blocking }}
+      run: |
+        set -uo pipefail
+        echo "::group::Auditando dependencias Python (nivel: $AUDIT_LEVEL)..."
+        audit_failed=false
+
+        if command -v uv >/dev/null 2>&1; then
+          if ! uvx pip-audit --local 2>&1; then
+            audit_failed=true
+          fi
+        elif command -v pip >/dev/null 2>&1; then
+          pip install --quiet pip-audit || true
+          if command -v pip-audit >/dev/null 2>&1; then
+            if ! pip-audit --local 2>&1; then
+              audit_failed=true
+            fi
+          fi
+        fi
+        echo "::endgroup::"
+
+        if [ "$audit_failed" = "true" ]; then
+          if [ "$AUDIT_BLOCKING" = "true" ]; then
+            echo "::error::Vulnerabilidades encontradas nas dependencias Python (audit-blocking=true)"
+            exit 1
+          else
+            echo "::warning::Vulnerabilidades encontradas nas dependencias Python"
+          fi
+        else
+          echo "Audit de dependencias Python concluido sem vulnerabilidades conhecidas"
+        fi
+
+    # ─── Rust ─────────────────────────────────────────
+    - name: Audit Rust dependencies
+      if: inputs.audit == 'true' && hashFiles('Cargo.lock', 'Cargo.toml') != ''
+      shell: bash
+      env:
+        AUDIT_BLOCKING: ${{ inputs.audit-blocking }}
+      run: |
+        set -uo pipefail
+        if ! command -v cargo >/dev/null 2>&1; then
+          echo "::notice::Cargo nao instalado no ambiente — etapa de audit pulada"
+          exit 0
+        fi
+        echo "::group::Auditando dependencias Rust via cargo-audit..."
+        audit_failed=false
+        if ! command -v cargo-audit >/dev/null 2>&1; then
+          cargo install cargo-audit --locked --quiet || true
+        fi
+        if command -v cargo-audit >/dev/null 2>&1; then
+          if ! cargo audit; then
+            audit_failed=true
+          fi
+        fi
+        echo "::endgroup::"
+
+        if [ "$audit_failed" = "true" ]; then
+          if [ "$AUDIT_BLOCKING" = "true" ]; then
+            echo "::error::Vulnerabilidades encontradas nas dependencias Rust (audit-blocking=true)"
+            exit 1
+          else
+            echo "::warning::Vulnerabilidades encontradas nas dependencias Rust"
+          fi
+        else
+          echo "Audit de dependencias Rust concluido"
+        fi
+
+    # ─── Go ───────────────────────────────────────────
+    - name: Audit Go dependencies
+      if: inputs.audit == 'true' && hashFiles('go.mod') != ''
+      shell: bash
+      env:
+        AUDIT_BLOCKING: ${{ inputs.audit-blocking }}
+      run: |
+        set -uo pipefail
+        if ! command -v go >/dev/null 2>&1; then
+          echo "::notice::Go nao instalado no ambiente — etapa de audit pulada"
+          exit 0
+        fi
+        echo "::group::Auditando dependencias Go via govulncheck..."
+        audit_failed=false
+        if ! go run golang.org/x/vuln/cmd/govulncheck@latest ./...; then
+          audit_failed=true
+        fi
+        echo "::endgroup::"
+
+        if [ "$audit_failed" = "true" ]; then
+          if [ "$AUDIT_BLOCKING" = "true" ]; then
+            echo "::error::Vulnerabilidades encontradas nas dependencias Go (audit-blocking=true)"
+            exit 1
+          else
+            echo "::warning::Vulnerabilidades encontradas nas dependencias Go"
+          fi
+        else
+          echo "Audit de dependencias Go concluido"
+        fi
 
     # ─── Helm / K8s ───────────────────────────────────
     - name: Install Helm

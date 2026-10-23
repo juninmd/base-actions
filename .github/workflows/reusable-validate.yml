@@ -24,6 +24,21 @@ on:
         required: false
         default: false
         description: 'true = lockfile desatualizado reprova em vez de cair no install nao-frozen.'
+      audit:
+        type: boolean
+        required: false
+        default: true
+        description: 'true = executa auditoria de seguranca de dependencias (npm/pnpm/yarn/bun, Python, Go, Rust).'
+      audit-level:
+        type: string
+        required: false
+        default: 'high'
+        description: 'Nivel minimo de severidade para auditoria (low, moderate, high, critical).'
+      audit-blocking:
+        type: boolean
+        required: false
+        default: false
+        description: 'true = vulnerabilidade reprova o gate. false = aviso informativo (warning).'
       persist-credentials:
         type: boolean
         required: false
@@ -76,3 +91,6 @@ jobs:
           pnpm-version: ${{ inputs.pnpm-version }}
           lint-blocking: ${{ inputs.lint-blocking }}
           strict-install: ${{ inputs.strict-install }}
+          audit: ${{ inputs.audit }}
+          audit-level: ${{ inputs.audit-level }}
+          audit-blocking: ${{ inputs.audit-blocking }}
