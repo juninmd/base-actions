@@ -41,9 +41,9 @@ inputs:
     default: 'high'
   audit-blocking:
     description: >-
-      true = vulnerabilidade encontrada reprova o gate. O padrao false emite warning informativo.
+      true = vulnerabilidade encontrada reprova o gate. Padrao true.
     required: false
-    default: 'false'
+    default: 'true'
 
 runs:
   using: composite
