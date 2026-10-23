@@ -134,17 +134,6 @@ runs:
         node-version: ${{ env.NODE_VERSION_DETECTED }}
         cache: ${{ steps.detect.outputs.npm-cache }}
 
-    # Node >= 17 removeu o provider OpenSSL legado; projetos antigos (webpack 4 etc.)
-    # precisam da flag. Decidido uma vez, vale para todos os passos seguintes.
-    - name: Configurar NODE_OPTIONS
-      if: hashFiles('package.json') != ''
-      shell: bash
-      run: |
-        NODE_MAJOR=$(node -v | cut -d'.' -f1 | tr -d 'v')
-        if [ "$NODE_MAJOR" -ge 17 ] 2>/dev/null; then
-          echo "NODE_OPTIONS=--openssl-legacy-provider" >> "$GITHUB_ENV"
-        fi
-
     - name: Check packageManager field
       id: check-pm
       if: hashFiles('pnpm-lock.yaml') != ''
@@ -265,9 +254,14 @@ runs:
           echo "::notice::Sem script \"test\" no package.json — etapa pulada"; exit 0
         fi
         case "$script" in
-          *"no test specified"*)
-            echo "::warning::Script de teste e o stub padrao do npm — nenhum teste roda"; exit 0 ;;
+          *"no test specified"*|*"Write tests!"*)
+            echo "::warning::Script de teste e o stub padrao — nenhum teste roda"; exit 0 ;;
         esac
+        # Se o projeto usa Playwright, instala os binarios dos browsers se necessario
+        if grep -q -E '"(@playwright/test|playwright)"' package.json 2>/dev/null; then
+          echo "::notice::Detectado Playwright — instalando navegadores"
+          npx playwright install --with-deps chromium 2>/dev/null || npx playwright install chromium 2>/dev/null || true
+        fi
         "$PM" test
 
     # ─── Python ───────────────────────────────────────
