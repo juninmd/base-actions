@@ -63,7 +63,7 @@ jobs:
       # `"$PM" test` sem `run` pega o runner nativo do Bun e ignora o script do projeto.
       - name: Teste do validate-pr sempre via script (run test)
         run: |
-          if grep -rnE --include=action.yml '"\$PM" test\b' .; then
+          if grep -rnE --include=action.yml 'PM" test\b' .; then
             echo "::error::use \"\$PM\" run test: 'bun test' ignora o script do package.json"
             exit 1
           fi
