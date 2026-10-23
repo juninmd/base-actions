@@ -254,6 +254,10 @@ jobs:
 
 ## 🛠 Desenvolvimento
 
+Requisitos locais: `actionlint`, `shellcheck`, Python 3 com `pyyaml` (`pip install pyyaml`) e,
+para o contrato do ruleset, `gitleaks`. Os runtimes das actions (Node, Python, Docker) vem do
+runner do GitHub, nao da sua maquina.
+
 `make lint` roda os mesmos gates do CI (actionlint + `lint-actions.py`). Veja
 [CONTRIBUTING.md](CONTRIBUTING.md) e [SECURITY.md](SECURITY.md).
 
