@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       language:
-        description: Linguagem a analisar (ex: 'javascript-typescript', 'python', 'go', 'actions')
+        description: "Linguagem a analisar (ex: 'javascript-typescript', 'python', 'go', 'actions')"
         type: string
         required: true
 
