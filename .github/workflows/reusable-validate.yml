@@ -37,8 +37,8 @@ on:
       audit-blocking:
         type: boolean
         required: false
-        default: false
-        description: 'true = vulnerabilidade reprova o gate. false = aviso informativo (warning).'
+        default: true
+        description: 'true = vulnerabilidade reprova o gate (padrao: true).'
       persist-credentials:
         type: boolean
         required: false
