@@ -1,0 +1,44 @@
+name: Reusable Stale Issues and PRs
+
+on:
+  workflow_call:
+    inputs:
+      days-before-stale:
+        description: Dias de inatividade antes de marcar como stale
+        type: number
+        required: false
+        default: 60
+      days-before-close:
+        description: Dias apos marcar stale antes de fechar
+        type: number
+        required: false
+        default: 7
+      stale-issue-message:
+        description: Mensagem postada na issue marcada como stale
+        type: string
+        required: false
+        default: 'Esta issue foi marcada como stale devido a inatividade. Sera fechada se nenhuma nova atividade ocorrer.'
+      stale-pr-message:
+        description: Mensagem postada no PR marcado como stale
+        type: string
+        required: false
+        default: 'Este PR foi marcado como stale devido a inatividade. Sera fechado se nenhuma nova atividade ocorrer.'
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/stale@5bef64f19d7facfb25b37b414482c7164d639639 # v9
+        with:
+          repo-token: ${{ github.token }}
+          days-before-issue-stale: ${{ inputs.days-before-stale }}
+          days-before-pr-stale: ${{ inputs.days-before-stale }}
+          days-before-issue-close: ${{ inputs.days-before-close }}
+          days-before-pr-close: ${{ inputs.days-before-close }}
+          stale-issue-message: ${{ inputs.stale-issue-message }}
+          stale-pr-message: ${{ inputs.stale-pr-message }}
