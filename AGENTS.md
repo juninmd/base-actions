@@ -44,8 +44,21 @@ Reference in workflows with `uses: juninmd/base-actions/<action>@main`
 
 ## Regras deste repo
 - Consumido por 140+ repos via `@main`: commit quebrado aqui = pipeline quebrado em todos.
-- Antes de qualquer commit: `actionlint` e `python .github/scripts/lint-actions.py`.
+- Antes de qualquer commit: `make lint` (= `actionlint` + `CI=1 python .github/scripts/lint-actions.py`;
+  requer `actionlint`, `shellcheck` e `pip install pyyaml`).
+- Testes locais: `python .github/scripts/test-validate-pr-secrets.py` e
+  `python testdata/assert.py gitleaks` (contrato do `gitleaks.toml`).
 - Shell dentro de `action.yml` nunca interpola `${{ inputs.* }}` direto no `run:` —
   passe por `env:` (o linter bloqueia).
 - Falha silenciosa é bug: nada de `|| echo "..."` engolindo exit code de teste ou deploy.
 - Arquivos YAML são LF puro e sem BOM (`.gitattributes` garante).
+
+## Gates de CI (`.github/workflows/ci.yml`, único gate antes do `main`)
+- `lint`: actionlint, `lint-actions.py` (schema, injeção, shellcheck), regressão do gate de segredos,
+  bloqueio de `"$PM" test` sem `run` e de `?.` em `node -e`.
+- `call-reusable-validate`: chama o próprio reusable (pega `startup_failure`).
+- `gitleaks-contract`: `test-gitleaks-config.yml`.
+- `smoke-actions`, `smoke-node` (npm/pnpm/yarn), `inputs-honored`, `smoke-gate`, `smoke-lint-blocking`:
+  executam as actions de verdade.
+- Workflows `test-*.yml` extras: `test-restricted-token`, `test-security-scan`, `test-validate-pr-branch`.
+- Não alterar `action.yml`/workflow sem passar por esses gates: 140+ repos consomem este repo.
