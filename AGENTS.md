@@ -12,6 +12,21 @@ Central repository for standardized GitHub Actions composite actions and reusabl
 - **setup-node-pnpm** - Node.js + pnpm setup
 - **setup-ollama** - Ollama setup for CI
 
+## Reusable Workflows (`.github/workflows/`)
+- `reusable-validate.yml` - CI agnóstico (Node/pnpm/npm/yarn/bun, Python/uv/pip, Playwright)
+- `reusable-security-scan.yml` - Varredura de segredos (Gitleaks)
+- `reusable-docker-build.yml` - Build e push Docker GHCR multi-arch
+- `reusable-deploy.yml` - Deploy e sync ArgoCD
+- `reusable-release-drafter.yml` - Release notes e rotulagem de PRs
+- `reusable-release.yml` - Publicação de tags e releases semânticas
+- `reusable-node-ci.yml` - CI para Node/pnpm
+- `reusable-commit-lint.yml` - Validação de Conventional Commits
+- `reusable-dependabot-auto-merge.yml` - Auto-merge squash para Dependabot
+- `reusable-pages.yml` - Deploy padronizado para GitHub Pages
+- `reusable-codeql.yml` - SAST CodeQL avançado
+- `reusable-stale.yml` - Gestão automática de issues/PRs inativos
+- `reusable-pr-labeler.yml` - Triagem automática de PRs por escopo de pastas
+
 ## Structure
 ```
 .github/         # Workflows

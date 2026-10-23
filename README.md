@@ -140,6 +140,99 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
+### 7. Release Drafter & Autolabeler
+Add this to `.github/workflows/release-drafter.yml`:
+
+```yaml
+name: Release Drafter
+on:
+  push:
+    branches: [main]
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+jobs:
+  draft:
+    uses: juninmd/base-actions/.github/workflows/reusable-release-drafter.yml@main
+```
+
+### 8. Dependabot Auto-Merge
+Add this to `.github/workflows/dependabot-auto-merge.yml`:
+
+```yaml
+name: Dependabot Auto-Merge
+on:
+  pull_request:
+
+jobs:
+  auto-merge:
+    uses: juninmd/base-actions/.github/workflows/reusable-dependabot-auto-merge.yml@main
+```
+
+### 9. GitHub Pages Deploy
+Add this to `.github/workflows/pages.yml`:
+
+```yaml
+name: Deploy Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  pages:
+    uses: juninmd/base-actions/.github/workflows/reusable-pages.yml@main
+    with:
+      artifact-path: 'dist'
+```
+
+### 10. CodeQL SAST Analysis
+Add this to `.github/workflows/codeql.yml`:
+
+```yaml
+name: CodeQL
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '0 3 * * 1'
+
+jobs:
+  analyze:
+    uses: juninmd/base-actions/.github/workflows/reusable-codeql.yml@main
+    with:
+      language: 'javascript-typescript'
+```
+
+### 11. Stale Issues & PRs
+Add this to `.github/workflows/stale.yml`:
+
+```yaml
+name: Stale
+on:
+  schedule:
+    - cron: '30 1 * * *'
+  workflow_dispatch:
+
+jobs:
+  stale:
+    uses: juninmd/base-actions/.github/workflows/reusable-stale.yml@main
+```
+
+### 12. PR Labeler
+Add this to `.github/workflows/labeler.yml`:
+
+```yaml
+name: PR Labeler
+on:
+  pull_request_target:
+
+jobs:
+  label:
+    uses: juninmd/base-actions/.github/workflows/reusable-pr-labeler.yml@main
+```
+
 ## 🧩 Composite actions avulsas
 
 | Action | Para que serve |

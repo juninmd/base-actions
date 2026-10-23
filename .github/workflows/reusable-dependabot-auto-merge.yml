@@ -1,0 +1,69 @@
+name: Reusable Dependabot Auto-Merge
+
+on:
+  workflow_call:
+    inputs:
+      target-update-types:
+        description: Tipos de update para auto-merge (separados por virgula, ou 'all')
+        type: string
+        required: false
+        default: 'version-update:semver-patch,version-update:semver-minor'
+      approve-pr:
+        description: Se deve aprovar o PR antes de habilitar o auto-merge
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Fetch Dependabot Metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@d7267f607e9d3fb96fc2fbe83e0af444713e90b7 # v2.3.0
+        with:
+          github-token: ${{ github.token }}
+
+      - name: Auto-merge PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+          ALLOWED_TYPES: ${{ inputs.target-update-types }}
+          SHOULD_APPROVE: ${{ inputs.approve-pr }}
+        run: |
+          set -euo pipefail
+          if [ -z "$PR_URL" ]; then
+            echo "::error::PR_URL nao definido (evento nao e pull_request)"
+            exit 1
+          fi
+
+          match=false
+          if [ "$ALLOWED_TYPES" = "all" ]; then
+            match=true
+          else
+            IFS=',' read -ra TYPES <<< "$ALLOWED_TYPES"
+            for t in "${TYPES[@]}"; do
+              trimmed=$(echo "$t" | tr -d ' ')
+              if [ "$trimmed" = "$UPDATE_TYPE" ]; then
+                match=true
+                break
+              fi
+            done
+          fi
+
+          if [ "$match" = "true" ]; then
+            if [ "$SHOULD_APPROVE" = "true" ]; then
+              gh pr review --approve "$PR_URL" || true
+            fi
+            gh pr merge --auto --squash "$PR_URL"
+            echo "Auto-merge squash habilitado para $PR_URL (tipo: $UPDATE_TYPE)"
+          else
+            echo "::notice::Update type '$UPDATE_TYPE' fora da lista de auto-merge ('$ALLOWED_TYPES'). Requer aprovacao manual."
+          fi
