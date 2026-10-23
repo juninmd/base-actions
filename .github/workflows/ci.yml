@@ -62,7 +62,7 @@ jobs:
       # `node -e` roda no Node 10 (detectado p/ projetos Angular 2): `?.` ali falha em silencio.
       - name: Sem optional chaining em node -e (Node 10)
         run: |
-          if grep -nE 'node -e .*\?\.' */action.yml; then
+          if grep -rnE --include=action.yml 'node -e .*\?\.' .; then
             echo "::error::optional chaining (?.) dentro de node -e quebra no Node 10"
             exit 1
           fi
