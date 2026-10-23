@@ -51,7 +51,7 @@ runs:
     - name: Check for committed secrets (Basic)
       shell: bash
       run: |
-        forbidden=$(git ls-files | grep -E '(^|\/)\.env$|(^|\/)\.env\.(local|production|prod|staging|dev)$|(^|\/)id_rsa$|(^|\/).+\.pem$|(^|\/).+\.key$' | grep -v -E '/(tests?|fixtures?|spec|examples?|mocks?)/' || true)
+        forbidden=$(git ls-files | grep -E '(^|\/)\.env$|(^|\/)\.env\.(local|production|prod|staging|dev)$|(^|\/)id_rsa$|(^|\/).+\.pem$|(^|\/).+\.key$' | grep -v -E '(^|/)(tests?|fixtures?|spec|examples?|mocks?)/' || true)
         if [ -n "$forbidden" ]; then
           echo "::error::Secret files tracked: $forbidden"
           exit 1
