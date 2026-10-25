@@ -1,0 +1,48 @@
+name: Auto-merge billing-blocked PRs
+
+# Mescla PRs cujos checks nao iniciam por billing/spending limit da conta.
+# Precisa rodar em repo publico: em repo privado bloqueado por billing o GitHub
+# nao inicia nenhum job, entao o proprio repo nao consegue se auto-mesclar.
+#
+# Secret obrigatorio: AUTOMERGE_TOKEN (PAT fine-grained com
+#   Contents: read/write, Pull requests: read/write, Checks: read, Metadata: read)
+# Variaveis opcionais: AUTOMERGE_AUTHORS, AUTOMERGE_DENY_LABELS, AUTOMERGE_MAX_MERGES
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Apenas relatar, sem mesclar'
+        type: boolean
+        default: true
+      repository:
+        description: 'Restringir a um repo (owner/nome); vazio = todos'
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: auto-merge-billing-blocked
+  cancel-in-progress: false
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
+          BOT_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+          BOT_REPOSITORY: ${{ inputs.repository }}
+          BOT_AUTHORS: ${{ vars.AUTOMERGE_AUTHORS }}
+          BOT_DENY_LABELS: ${{ vars.AUTOMERGE_DENY_LABELS }}
+          BOT_MAX_MERGES: ${{ vars.AUTOMERGE_MAX_MERGES }}
+        run: |
+          python3 -m py_compile .github/scripts/auto_merge_billing_blocked.py
+          python3 .github/scripts/auto_merge_billing_blocked.py

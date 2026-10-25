@@ -62,3 +62,19 @@ Reference in workflows with `uses: juninmd/base-actions/<action>@main`
   executam as actions de verdade.
 - Workflows `test-*.yml` extras: `test-restricted-token`, `test-security-scan`, `test-validate-pr-branch`.
 - Não alterar `action.yml`/workflow sem passar por esses gates: 140+ repos consomem este repo.
+
+## Referencia as actions internas (@main, nunca SHA)
+
+- `uses: juninmd/base-actions/<action>@main` e
+  `uses: juninmd/base-actions/.github/workflows/<reusable>.yml@main`.
+- Nao fixe `@<sha>` em `juninmd/base-actions`: a atualizacao e centralizada no
+  `main` e passa a valer no proximo run.
+
+## Auto-merge de PRs bloqueados por billing
+
+- `.github/workflows/auto-merge-billing-blocked.yml` roda neste repo publico e usa o
+  secret `AUTOMERGE_TOKEN` (PAT fine-grained) para mesclar PRs cujos checks nao
+  iniciam por `recent account payments have failed` / `spending limit`.
+- So mescla autores da allowlist (`AUTOMERGE_AUTHORS`), apenas no branch default,
+  e somente quando **toda** falha for de billing.
+- Opt-out por PR: label `do-not-merge` (configuravel em `AUTOMERGE_DENY_LABELS`).
