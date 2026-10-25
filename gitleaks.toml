@@ -48,6 +48,8 @@ tags = ["password", "juninmd"]
     "placeholder", "dummy", "sample", "redacted", "xxxxxx", "123456",
     "password", "passwd", "senha", "secret", "hunter2", "s3cr3t",
     "todo", "fixme", "notset", "none", "null", "undefined", "empty",
+    # Saida de parser/relatorio: `password = "Not Found"` nao e credencial.
+    "not found", "notfound", "n/a",
   ]
 
   [[rules.allowlists]]
