@@ -78,3 +78,37 @@ Reference in workflows with `uses: juninmd/base-actions/<action>@main`
 - So mescla autores da allowlist (`AUTOMERGE_AUTHORS`), apenas no branch default,
   e somente quando **toda** falha for de billing.
 - Opt-out por PR: label `do-not-merge` (configuravel em `AUTOMERGE_DENY_LABELS`).
+
+### Como reconhecer uma falha de billing (bypass)
+
+Sintoma exato, na anotacao do job:
+
+> The job was not started because recent account payments have failed or your
+> spending limit needs to be increased.
+
+Caracteristicas que confirmam que **nao e bug de codigo**:
+
+- o run fica `startup_failure` ou `failure` **sem nenhum job** (`jobs` vazio);
+- as vezes ha job, mas o passo nem comeca e a unica anotacao e a de pagamento;
+- o mesmo SHA passa em repo publico e falha em repo privado.
+
+Diagnostico rapido:
+
+```bash
+gh api "repos/<owner>/<repo>/actions/runs/<run-id>/jobs" \
+  --jq '.jobs[].id' | while read -r id; do
+    gh api "repos/<owner>/<repo>/check-runs/$id/annotations" --jq '.[].message'
+  done
+```
+
+Tratamento:
+
+- **Nao** mascare com `continue-on-error`, `|| true` ou remocao de gate: o
+  problema e de faturamento, nao do workflow.
+- Valide a correcao localmente (install/lint/test/build e `gitleaks detect`) e
+  registre no PR que o CI remoto nao iniciou por billing.
+- O job `auto-merge-billing-blocked` acima mescla o PR quando o unico bloqueio
+  e esse.
+- Correcao definitiva e do dono da conta: GitHub > Settings > Billing
+  (meio de pagamento e spending limit). Enquanto isso, repos privados seguem
+  sem rodar Actions.
