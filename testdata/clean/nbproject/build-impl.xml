@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Corpus de teste: build-impl.xml gerado pelo NetBeans. Os nomes de
+     propriedade terminam em `.internal` mas nao sao hostnames. -->
+<project name="FakeApp" default="default" basedir=".">
+    <property name="ap.supported.internal" value="false"/>
+    <property name="ap.processors.internal" value=""/>
+    <property name="proc.none.internal" value="true"/>
+    <property name="cmd.line.internal" value="false"/>
+</project>
