@@ -55,8 +55,12 @@ tags = ["password", "juninmd"]
   paths = [
     '''(?i)(^|/)(tests?|specs?|__tests__|fixtures?|mocks?|examples?|samples?)/''',
     '''(?i)(^|/)[^/]*\.(?:test|spec)\.[a-z]+$''',
-    '''(?i)(^|/)(?:package-lock\.json|yarn\.lock|pnpm-lock\.yaml|composer\.lock|Cargo\.lock|uv\.lock|poetry\.lock)$''',
+    '''(?i)(^|/)(?:package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lock|bun\.lockb|composer\.lock|Cargo\.lock|uv\.lock|poetry\.lock|Gemfile\.lock|go\.sum)$''',
     '''(?i)(^|/)\.env\.(?:example|sample|template|dist)$''',
+    # Arquivos de traducao: a chave `password`/`senha` e um rotulo de UI
+    # ("Contrasena", "Mot de passe"), nunca uma credencial. Sem isto, cada
+    # idioma do app gera um falso positivo por string traduzida.
+    '''(?i)(^|/)(?:i18n|locale|locales|lang|translations|messages)/''',
   ]
 
 # ─────────────────────────────────────────────────────────────────────
@@ -132,6 +136,14 @@ tags = ["infrastructure", "juninmd"]
   regexes = [
     '''(?i)\.(?:svc\.cluster\.local|cluster\.internal)$''',
     '''(?i)^(?:registry|packages|proxy)\.(?:npmjs|docker|github)\.''',
+    # Endpoint de metadados de cloud: hostname fixo e publico, nao topologia
+    # privada. Citado em qualquer guard de SSRF (GCP/AWS metadata).
+    '''(?i)^metadata\.google\.internal$''',
+    '''(?i)^169\.254\.169\.254$''',
+    # Dominios reservados para documentacao e teste (RFC 2606): nunca resolvem
+    # para uma rede real, entao nao revelam topologia.
+    '''(?i)^[a-z0-9.\-]*\.example\.(?:com|org|net|corp|internal|lan)$''',
+    '''(?i)^[a-z0-9.\-]*\.[a-z0-9.\-]*\.example\.(?:com|org|net)$''',
   ]
 
 # ─────────────────────────────────────────────────────────────────────
