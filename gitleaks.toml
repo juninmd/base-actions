@@ -211,3 +211,16 @@ paths = [
   '''(^|/)(?:dist|build|out|target)/''',
   '''(?i)\.(?:png|jpe?g|gif|ico|svg|pdf|zip|gz|tgz|woff2?|ttf|eot|exe|dll|so|dylib|class|jar|wasm|min\.js|map)$''',
 ]
+
+[[allowlists]]
+description = "Hashes (sha256/sha1/md5) nao sao credenciais"
+regexTarget = "secret"
+regexes = [
+  # Relatorio de integridade de fontes gera um hash por arquivo; o
+  # generic-api-key lia a string hex como chave. No ecos-de-baia-cinzenta
+  # isso sozinho rendia 122 achados.
+  '''(?i)^[0-9a-f]{40}$''',
+  '''(?i)^[0-9a-f]{64}$''',
+  '''(?i)^sha(?:1|256|512)-[A-Za-z0-9+/=]{16,}$''',
+]
+
