@@ -144,6 +144,16 @@ tags = ["infrastructure", "juninmd"]
     # para uma rede real, entao nao revelam topologia.
     '''(?i)^[a-z0-9.\-]*\.example\.(?:com|org|net|corp|internal|lan)$''',
     '''(?i)^[a-z0-9.\-]*\.[a-z0-9.\-]*\.example\.(?:com|org|net)$''',
+    # Nomes de PROPRIEDADE do Ant/NetBeans terminam em `.internal` e nao sao
+    # hostnames (ap.supported.internal, proc.none.internal, cmd.line.internal).
+    # Aparecem em todo build-impl.xml gerado pela IDE.
+    '''(?i)^(?:ap|proc|cmd|javac|j2ee|jar|test|src|native)\.(?:[a-z0-9_]+\.)*[a-z0-9_]+$''',
+  ]
+
+  [[rules.allowlists]]
+  description = "Metadados gerados pela IDE (nao escritos a mao)"
+  paths = [
+    '''(?i)(^|/)nbproject/''',
   ]
 
 # ─────────────────────────────────────────────────────────────────────
