@@ -24,6 +24,14 @@ module.exports = {
   // DNS interno de Kubernetes, nao e vazamento
   broker: 'blackbox-exporter.monitoring.svc.cluster.local:9115',
 
+  // endpoints de metadados de cloud: hostnames publicos e fixos
+  metadata: 'http://metadata.google.internal/computeMetadata/v1/',
+  linkLocal: 'http://169.254.169.254/latest/meta-data/',
+
+  // dominios reservados para documentacao/teste (RFC 2606)
+  exampleHost: 'interno.example.corp',
+  docHost: 'api.servico.example.com',
+
   // campo de formulario chamado "local" — nao e hostname
   form: { local: 'Franca-SP' },
 

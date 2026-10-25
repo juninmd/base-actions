@@ -1,0 +1,10 @@
+{
+  "login": {
+    "password": "Senha",
+    "confirmPassword": "Confirmar senha",
+    "showPassword": "Mostrar a senha"
+  },
+  "settings": {
+    "password": "Contraseña maestra"
+  }
+}

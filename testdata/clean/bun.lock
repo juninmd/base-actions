@@ -1,0 +1,14 @@
+{
+  "lockfileVersion": 1,
+  "workspaces": {
+    "": {
+      "dependencies": {
+        "zod": "^3.24.1"
+      }
+    }
+  },
+  "packages": {
+    "password": ["password@5.2.2", "", {}, "sha512-fake"],
+    "senha": ["senha@5.1.1", "", {}, "sha512-fake"]
+  }
+}
