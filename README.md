@@ -341,9 +341,8 @@ python testdata/assert.py gitleaks   # roda igual na máquina
 
 ## 🧪 Desenvolvendo neste repo
 
-> ⚠️ `setup-ollama` instala via `curl https://ollama.com/install.sh | sh`, sem checksum —
-> ao contrario do actionlint e do gitleaks, que sao pinados e verificados. O instalador do
-> Ollama nao publica hash estavel; e risco de cadeia de suprimentos aceito conscientemente.
+> `setup-ollama` baixa a versao fixada do release oficial e confere o tarball contra o
+> `sha256sum.txt` publicado (sem `curl | sh`), como actionlint e gitleaks.
 
 ```bash
 actionlint                              # lint dos workflows
