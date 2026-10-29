@@ -150,6 +150,11 @@ tags = ["infrastructure", "juninmd"]
     # hostnames (ap.supported.internal, proc.none.internal, cmd.line.internal).
     # Aparecem em todo build-impl.xml gerado pela IDE.
     '''(?i)^(?:ap|proc|cmd|javac|j2ee|jar|test|src|native)\.(?:[a-z0-9_]+\.)*[a-z0-9_]+$''',
+    # Namespaces de codigo (pacotes Kotlin/Java, identificadores do editor e
+    # chaves de internacionalizacao) terminam em `.internal` sem serem
+    # hostnames: kotlinx.coroutines.internal, meta.supported.internal,
+    # web.extension.internal, com.foo.internal.
+    '''(?i)^(?:kotlinx?|java|javax|jakarta|com|org|io|dev|net|node|npm|gradle|androidx?|vscode|microsoft|github|web|meta|ap|proc|cmd|src|app|lib|core|internal)\.(?:[a-z0-9_]+\.)*[a-z0-9_]+$''',
   ]
 
   [[rules.allowlists]]
@@ -245,6 +250,14 @@ paths = [
   '''(?i)\.(mp3|wav|ogg|flac|png|jpe?g|gif|webp|ico|svg|zip|gz|tgz|tar|pdf|ttf|woff2?|pyc|class|jar)$''',
   '''(?i)(^|/)search_index\.json$''',
   '''(?i)(^|/)[^/]*\.enc\.ya?ml$''',
+  '''(?i)(^|/)\.gitleaksignore$''',
+  '''(?i)(^|/)\.env\.(?:example|sample|dist|template)$''',
+  # "exemplo" em portugues: mesma semantica de examples/samples.
+  '''(?i)(^|/)exemplos?/''',
+  # Artefatos de cobertura e export do Sonar: saida de ferramenta, nao codigo.
+  '''(?i)(^|/)(?:lcov-report|coverage)/''',
+  '''(?i)(^|/)(?:full_cov|coverage|test_output)(?:[^/]*)\.(?:txt|json|html)$''',
+  '''(?i)(^|/)sonar_issues\.json$''',
   '''(?i)(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lock|bun\.lockb|composer\.lock|Cargo\.lock|uv\.lock|poetry\.lock|Gemfile\.lock|go\.sum)$''',
 ]
 regexes = [
