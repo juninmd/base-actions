@@ -226,3 +226,28 @@ regexes = [
   '''(?i)^sha(?:1|256|512)-[A-Za-z0-9+/=]{16,}$''',
 ]
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Allowlist global (vale para o ruleset padrao E para as regras custom)
+#
+# As allowlists dentro de [[rules.allowlists]] so valem para a regra que as
+# declara. Sem esta secao, as regras padrao do Gitleaks (generic-api-key,
+# private-key, github-pat, ...) acusam fixtures de teste, documentacao,
+# notebooks, binarios e lockfiles em todo o historico - o que mantinha o job
+# de PR vermelho em repositorios antigos.
+# ─────────────────────────────────────────────────────────────────────────────
+[[allowlists]]
+description = "Falsos positivos estruturais: testes, docs, notebooks, binarios, lockfiles e metadados"
+paths = [
+  '''(?i)(^|/)(tests?|specs?|__tests__|__mocks__|fixtures?|mocks?|examples?|samples?)/''',
+  '''(?i)(^|/)[^/]*\.(test|spec)\.[a-z0-9]+$''',
+  '''(?i)\.(md|mdx|rst|ipynb)$''',
+  '''(?i)\.(mp3|wav|ogg|flac|png|jpe?g|gif|webp|ico|svg|zip|gz|tgz|tar|pdf|ttf|woff2?|pyc|class|jar)$''',
+  '''(?i)(^|/)search_index\.json$''',
+  '''(?i)(^|/)[^/]*\.enc\.ya?ml$''',
+  '''(?i)(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lock|bun\.lockb|composer\.lock|Cargo\.lock|uv\.lock|poetry\.lock|Gemfile\.lock|go\.sum)$''',
+]
+regexes = [
+  # Metadado do Backstage/catalog-info, nao e credencial.
+  '''(?i)sonarqube\.org/project-key:\s*\S+''',
+]
