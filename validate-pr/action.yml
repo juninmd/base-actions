@@ -16,6 +16,13 @@ inputs:
     description: pnpm version
     required: false
     default: 'latest'
+  test-script:
+    description: >-
+      Nome do script do package.json que a etapa "Test Node" executa. O padrao `test`
+      preserva o comportamento atual; use outro (ex.: `test:unit`) quando `test` e uma
+      suite pesada que o gate generico nao consegue montar (E2E que exige binario proprio).
+    required: false
+    default: 'test'
   lint-blocking:
     description: >-
       true = falha do lint (eslint/ruff) reprova o gate. O padrao false mantem o
@@ -264,12 +271,13 @@ runs:
       shell: bash
       env:
         PM: ${{ steps.detect.outputs.pm }}
+        TEST_SCRIPT: ${{ inputs.test-script }}
       run: |
         # le o script direto do package.json: `npm test --if-present` nao e confiavel
         # (--if-present e flag de `npm run`) e o stub padrao do npm sai com erro.
-        script=$(node -p "try{require('./package.json').scripts.test||''}catch(e){''}")
+        script=$(node -p "try{require('./package.json').scripts[process.env.TEST_SCRIPT]||''}catch(e){''}")
         if [ -z "$script" ]; then
-          echo "::notice::Sem script \"test\" no package.json — etapa pulada"; exit 0
+          echo "::notice::Sem script \"$TEST_SCRIPT\" no package.json — etapa pulada"; exit 0
         fi
         case "$script" in
           *"no test specified"*|*"Write tests!"*)
@@ -281,7 +289,7 @@ runs:
           npx playwright install --with-deps chromium 2>/dev/null || npx playwright install chromium 2>/dev/null || true
         fi
         # `run` obrigatorio: `bun test` e o runner nativo do Bun e ignora o script do package.json
-        "$PM" run test
+        "$PM" run "$TEST_SCRIPT"
 
     - name: Audit Node dependencies
       if: inputs.audit == 'true' && hashFiles('package.json') != ''

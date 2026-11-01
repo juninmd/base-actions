@@ -258,6 +258,51 @@ jobs:
           fi
           echo "gate correto: verde passa, vermelho derruba"
 
+  smoke-test-script:
+    name: Smoke - test-script escolhe o script de teste (e o padrao continua `test`)
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fixture com `test` vermelho e `test:unit` verde
+        run: |
+          set -euo pipefail
+          cat > package.json <<'JSON'
+          {
+            "name": "test-script", "version": "1.0.0", "private": true,
+            "scripts": {
+              "test": "node -e \"process.exit(1)\"",
+              "test:unit": "node -e \"process.exit(0)\""
+            }
+          }
+          JSON
+          npm install --package-lock-only --no-audit --no-fund
+
+      # padrao: roda `test`, que e vermelho
+      - id: default
+        continue-on-error: true
+        uses: ./validate-pr
+
+      - id: custom
+        continue-on-error: true
+        uses: ./validate-pr
+        with:
+          test-script: 'test:unit'
+
+      - name: Assercao
+        env:
+          DEFAULT: ${{ steps.default.outcome }}
+          CUSTOM: ${{ steps.custom.outcome }}
+        run: |
+          echo "padrao=$DEFAULT  test-script=$CUSTOM"
+          [ "$DEFAULT" = "failure" ] || { echo "::error::sem test-script o gate deveria rodar o script test (vermelho) e reprovar"; exit 1; }
+          [ "$CUSTOM" = "success" ] || { echo "::error::test-script: test:unit deveria rodar o script verde e passar"; exit 1; }
+
   smoke-lint-blocking:
     name: Smoke - lint-blocking reprova (e o padrao nao)
     needs: lint
