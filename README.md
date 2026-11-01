@@ -32,6 +32,7 @@ jobs:
     uses: juninmd/base-actions/.github/workflows/reusable-validate.yml@main
     with:
       node-version: '22'       # Optional
+      test-script: 'test'      # script do package.json rodado na etapa de teste (padrao: test)
       lint-blocking: false     # true = falha de lint reprova o gate (padrao: so warning)
       strict-install: false    # true = lockfile desatualizado reprova (padrao: fallback com warning)
       audit: true              # true = executa auditoria de vulnerabilidades (padrao: true)

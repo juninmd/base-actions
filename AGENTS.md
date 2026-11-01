@@ -58,7 +58,7 @@ Reference in workflows with `uses: juninmd/base-actions/<action>@main`
   bloqueio de `"$PM" test` sem `run` e de `?.` em `node -e`.
 - `call-reusable-validate`: chama o próprio reusable (pega `startup_failure`).
 - `gitleaks-contract`: `test-gitleaks-config.yml`.
-- `smoke-actions`, `smoke-node` (npm/pnpm/yarn), `inputs-honored`, `smoke-gate`, `smoke-lint-blocking`:
+- `smoke-actions`, `smoke-node` (npm/pnpm/yarn), `inputs-honored`, `smoke-gate`, `smoke-lint-blocking`, `smoke-test-script`:
   executam as actions de verdade.
 - Workflows `test-*.yml` extras: `test-restricted-token`, `test-security-scan`, `test-validate-pr-branch`.
 - Não alterar `action.yml`/workflow sem passar por esses gates: 140+ repos consomem este repo.
