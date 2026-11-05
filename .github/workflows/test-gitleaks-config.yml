@@ -1,0 +1,36 @@
+name: Test Gitleaks Config
+
+on:
+  push:
+    paths:
+      - 'gitleaks.toml'
+      - 'testdata/**'
+      - '.github/workflows/test-gitleaks-config.yml'
+  pull_request:
+    paths:
+      - 'gitleaks.toml'
+      - 'testdata/**'
+      - '.github/workflows/test-gitleaks-config.yml'
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install gitleaks
+        run: |
+          VERSION=8.30.1
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      # Falha se alguma regra parar de pegar o vazamento, ou se alguma
+      # comecar a acusar placeholder.
+      - name: Assert ruleset
+        run: python testdata/assert.py gitleaks
