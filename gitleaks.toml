@@ -209,12 +209,19 @@ tags = ["token", "juninmd"]
 # O Google AI Studio passou a emitir chaves `AQ.Ab...` (Auth key) no lugar
 # das `AIza...` (Standard key). A regra `gcp-api-key` do ruleset padrao so
 # conhece AIza, entao sem esta regra a chave nova passa inteira.
+#
+# Formato real: 53 caracteres (`AQ.Ab` + 48 base64url). O detector oficial do
+# Google (osv-scalibr) exige `AQ.Ab8R`; aqui o ancora e `AQ.Ab` + 30 ou mais
+# para nao perder chaves com outro marcador de versao nem copias truncadas em
+# log/print (o valor completo no texto original costuma vir cortado).
 # Ref: https://ai.google.dev/gemini-api/docs/api-key
+#      https://github.com/google/osv-scalibr/blob/main/veles/secrets/gcpexpressmode/detector.go
+#      https://github.com/trufflesecurity/trufflehog/pull/5440
 # ─────────────────────────────────────────────────────────────────────
 [[rules]]
 id = "juninmd-google-gemini-auth-key"
 description = "Chave de autenticacao do Google Gemini no formato AQ.Ab..."
-regex = '''\b(AQ\.Ab[A-Za-z0-9_\-]{30,})(?:[\x60'"\s;]|\\[nr]|$)'''
+regex = '''\b(AQ\.Ab[A-Za-z0-9_\-]{30,})(?:[^A-Za-z0-9_\-]|$)'''
 secretGroup = 1
 keywords = ["aq.ab"]
 tags = ["api-key", "google", "gemini", "juninmd"]
@@ -223,7 +230,7 @@ tags = ["api-key", "google", "gemini", "juninmd"]
   description = "Placeholders, valores de exemplo e interpolacao"
   regexTarget = "secret"
   regexes = [
-    '''(?i)^AQ\.Ab(?:[x*]+|example|placeholder|your|fake|dummy)''',
+    '''(?i)^AQ\.Ab(?:x{8,}|\*{8,}|example|placeholder|your|fake|dummy)$''',
   ]
   stopwords = ["example", "exemplo", "placeholder", "your", "fake", "dummy"]
 
@@ -231,15 +238,20 @@ tags = ["api-key", "google", "gemini", "juninmd"]
 # Chaves de API de provedores de IA ainda ausentes do ruleset padrao
 #
 # OpenRouter: sk-or-v1- + 64 hex
-# Groq:       gsk_ + 48 alfanumericos
+# Groq:       gsk_ + 48 a 52 alfanumericos
 # xAI/Grok:   xai- + 80 alfanumericos
+#
+# Groq aceita 48 e 52 porque o PR aberto no gitleaks usa 48 e o detector do
+# TruffleHog usa 52; as duas larguras ja foram emitidas pela Groq.
 # Ref: https://github.com/gitleaks/gitleaks/pull/2181
+#      https://github.com/gitleaks/gitleaks/pull/2310
 #      https://github.com/gitleaks/gitleaks/issues/2309
+#      https://github.com/trufflesecurity/trufflehog/blob/main/pkg/detectors/groq/groq.go
 # ─────────────────────────────────────────────────────────────────────
 [[rules]]
 id = "juninmd-openrouter-api-key"
 description = "Chave de API do OpenRouter (sk-or-v1-...)"
-regex = '''\b(sk-or-v1-[a-f0-9]{64})(?:[\x60'"\s;]|\\[nr]|$)'''
+regex = '''\b(sk-or-v1-[a-f0-9]{64})(?:[^A-Za-z0-9]|$)'''
 secretGroup = 1
 keywords = ["sk-or-v1-"]
 tags = ["api-key", "openrouter", "juninmd"]
@@ -248,14 +260,14 @@ tags = ["api-key", "openrouter", "juninmd"]
   description = "Placeholders e valores de exemplo"
   regexTarget = "secret"
   regexes = [
-    '''(?i)^sk-or-v1-(?:x{8,}|0{8,}|example|placeholder)''',
+    '''(?i)^sk-or-v1-(?:x{8,}|0{8,}|example|placeholder)$''',
   ]
   stopwords = ["example", "exemplo", "placeholder", "your", "fake", "dummy"]
 
 [[rules]]
 id = "juninmd-groq-api-key"
 description = "Chave de API da Groq (gsk_...)"
-regex = '''\b(gsk_[A-Za-z0-9]{48})(?:[\x60'"\s;]|\\[nr]|$)'''
+regex = '''\b(gsk_[A-Za-z0-9]{48,52})(?:[^A-Za-z0-9]|$)'''
 secretGroup = 1
 keywords = ["gsk_"]
 tags = ["api-key", "groq", "juninmd"]
@@ -264,14 +276,14 @@ tags = ["api-key", "groq", "juninmd"]
   description = "Placeholders e valores de exemplo"
   regexTarget = "secret"
   regexes = [
-    '''(?i)^gsk_(?:x{8,}|0{8,}|example|placeholder)''',
+    '''(?i)^gsk_(?:x{8,}|0{8,}|example|placeholder)$''',
   ]
   stopwords = ["example", "exemplo", "placeholder", "your", "fake", "dummy"]
 
 [[rules]]
 id = "juninmd-xai-api-key"
 description = "Chave de API da xAI/Grok (xai-...)"
-regex = '''\b(xai-[A-Za-z0-9]{80})(?:[\x60'"\s;]|\\[nr]|$)'''
+regex = '''\b(xai-[A-Za-z0-9]{80})(?:[^A-Za-z0-9]|$)'''
 secretGroup = 1
 keywords = ["xai-"]
 tags = ["api-key", "xai", "juninmd"]
@@ -280,7 +292,7 @@ tags = ["api-key", "xai", "juninmd"]
   description = "Placeholders e valores de exemplo"
   regexTarget = "secret"
   regexes = [
-    '''(?i)^xai-(?:x{8,}|0{8,}|example|placeholder)''',
+    '''(?i)^xai-(?:x{8,}|0{8,}|example|placeholder)$''',
   ]
   stopwords = ["example", "exemplo", "placeholder", "your", "fake", "dummy"]
 
@@ -294,7 +306,7 @@ tags = ["api-key", "xai", "juninmd"]
 [[rules]]
 id = "juninmd-google-oauth-client-secret"
 description = "Client secret do Google OAuth (GOCSPX-...)"
-regex = '''\b(GOCSPX-[A-Za-z0-9_\-]{20,})(?:[\x60'"\s;]|\\[nr]|$)'''
+regex = '''\b(GOCSPX-[A-Za-z0-9_\-]{20,})(?:[^A-Za-z0-9_\-]|$)'''
 secretGroup = 1
 keywords = ["gocspx-"]
 tags = ["api-key", "google", "oauth", "juninmd"]
@@ -306,6 +318,548 @@ tags = ["api-key", "google", "oauth", "juninmd"]
     '''(?i)^GOCSPX-(?:x{8,}|0{8,}|example|placeholder)''',
   ]
   stopwords = ["example", "exemplo", "placeholder", "your", "fake", "dummy"]
+
+# ─────────────────────────────────────────────────────────────────────
+# Padrões incorporados do tokenix e do TruffleHog
+#
+# Fontes:
+#   https://github.com/juninmd/tokenix/blob/main/assets/secret-rules/default.toml
+#   https://github.com/trufflesecurity/trufflehog/tree/main/pkg/detectors
+#   https://github.com/gitleaks/gitleaks/blob/master/config/gitleaks.toml
+#
+# Só entram aqui os formatos que o ruleset padrão do Gitleaks (222 regras)
+# ainda não cobre. Prefixos específicos dispensam contexto; os poucos casos
+# contextuais usam entropia ou uma palavra-chave próxima para evitar FP.
+# ─────────────────────────────────────────────────────────────────────
+
+# --- Cloud / infraestrutura ------------------------------------------------
+
+[[rules]]
+id = "juninmd-aws-access-key-id-extra"
+description = "AWS access key ID com prefixos que o ruleset padrao nao cobre"
+regex = '''\b((?:AGPA|AIDA|AROA|AIPA|ANPA|ANVA)[A-Z0-9]{16})\b'''
+secretGroup = 1
+entropy = 3
+keywords = ["agpa", "aida", "aroa", "aipa", "anpa", "anva"]
+tags = ["aws", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-aws-secret-access-key"
+description = "AWS secret access key atribuida no codigo"
+regex = '''(?i)aws_?secret_?(?:access_?)?key["' ]?\s*[:=]\s*["']?([A-Za-z0-9/+]{40})'''
+secretGroup = 1
+entropy = 4.0
+keywords = ["aws_secret", "secret_access_key"]
+tags = ["aws", "secret", "juninmd"]
+
+  [[rules.allowlists]]
+  description = "Placeholders e exemplos"
+  regexTarget = "secret"
+  regexes = [
+    '''(?i)^(?:x+|0+|example|placeholder|your|fake)''',
+  ]
+  stopwords = ["example", "exemplo", "placeholder", "your", "fake", "dummy"]
+
+[[rules]]
+id = "juninmd-azure-storage-account-key"
+description = "AccountKey de Azure Storage embutida em connection string"
+regex = '''(?i)AccountKey=([A-Za-z0-9+/]{86}==)'''
+secretGroup = 1
+keywords = ["accountkey"]
+tags = ["azure", "storage", "juninmd"]
+
+[[rules]]
+id = "juninmd-digitalocean-token-v1"
+description = "Token v1 da DigitalOcean com prefixo dot_ (nao coberto pelo padrao)"
+regex = '''\b(dot_v1_[0-9a-f]{64})\b'''
+secretGroup = 1
+keywords = ["dot_v1_"]
+tags = ["digitalocean", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-vault-token"
+description = "Token do HashiCorp Vault (service, batch ou recovery)"
+regex = '''\b(hv[sbr]\.[0-9A-Za-z_-]{20,})\b'''
+secretGroup = 1
+keywords = ["hvs.", "hvb.", "hvr."]
+tags = ["vault", "token", "juninmd"]
+
+# --- Pagamentos / comercio -------------------------------------------------
+
+[[rules]]
+id = "juninmd-stripe-webhook-secret"
+description = "Webhook signing secret do Stripe"
+regex = '''\b(whsec_[0-9A-Za-z]{32,})\b'''
+secretGroup = 1
+keywords = ["whsec_"]
+tags = ["stripe", "webhook", "juninmd"]
+
+[[rules]]
+id = "juninmd-paypal-braintree-token"
+description = "Access token de producao do PayPal Braintree"
+regex = '''\b(access_token\$production\$[0-9a-z]{16}\$[0-9a-f]{32})\b'''
+secretGroup = 1
+keywords = ["access_token$production$"]
+tags = ["paypal", "braintree", "token", "juninmd"]
+
+[[rules]]
+id = "juninmd-razorpay-key"
+description = "Chave de API do Razorpay (live ou test)"
+regex = '''(?i)\b(rzp_(?:live|test)_[A-Za-z0-9]{14})\b'''
+secretGroup = 1
+keywords = ["rzp_live_", "rzp_test_"]
+tags = ["razorpay", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-paystack-key"
+description = "Secret key do Paystack (live ou test)"
+regex = '''\b(sk_[a-z]+_[A-Za-z0-9]{40})\b'''
+secretGroup = 1
+keywords = ["sk_live_", "sk_test_"]
+tags = ["paystack", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-pagarme-key"
+description = "Chave de API live do Pagar.me"
+regex = '''\b(ak_live_[a-zA-Z0-9]{30})\b'''
+secretGroup = 1
+keywords = ["ak_live_"]
+tags = ["pagarme", "api-key", "juninmd"]
+
+# --- Comunicacao -----------------------------------------------------------
+
+[[rules]]
+id = "juninmd-discord-bot-token"
+description = "Token de bot do Discord"
+regex = '''\b([MNO][A-Za-z0-9_-]{23,25}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,})\b'''
+secretGroup = 1
+tags = ["discord", "token", "juninmd"]
+
+[[rules]]
+id = "juninmd-discord-webhook"
+description = "Webhook do Discord com token embutido"
+regex = '''(https://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+)'''
+secretGroup = 1
+keywords = ["discord.com/api/webhooks", "discordapp.com/api/webhooks"]
+tags = ["discord", "webhook", "juninmd"]
+
+[[rules]]
+id = "juninmd-resend-api-key"
+description = "Chave de API do Resend"
+regex = '''\b(re_[1-9A-HJ-NP-Za-km-z]{8}_[1-9A-HJ-NP-Za-km-z]{24})\b'''
+secretGroup = 1
+keywords = ["re_"]
+tags = ["resend", "api-key", "juninmd"]
+
+# --- Pacotes / registries --------------------------------------------------
+
+[[rules]]
+id = "juninmd-docker-hub-pat"
+description = "Personal access token do Docker Hub"
+regex = '''\b(dckr_pat_[0-9A-Za-z_-]{27,}|dckr_oat_[0-9A-Za-z_-]{32})\b'''
+secretGroup = 1
+keywords = ["dckr_pat_", "dckr_oat_"]
+tags = ["docker", "token", "juninmd"]
+
+[[rules]]
+id = "juninmd-buildkite-token"
+description = "Token de agente/API do Buildkite"
+regex = '''\b(bkua_[a-z0-9]{40})\b'''
+secretGroup = 1
+keywords = ["bkua_"]
+tags = ["buildkite", "token", "juninmd"]
+
+# --- Observabilidade / SaaS ------------------------------------------------
+
+[[rules]]
+id = "juninmd-sonarcloud-token"
+description = "Token do SonarCloud no formato sqco_"
+regex = '''\b(sqco_[0-9A-Za-z]{59})\b'''
+secretGroup = 1
+keywords = ["sqco_"]
+tags = ["sonar", "token", "juninmd"]
+
+[[rules]]
+id = "juninmd-newrelic-license-key"
+description = "License key do New Relic"
+regex = '''\b([0-9a-f]{40}NRAL)\b'''
+secretGroup = 1
+keywords = ["nral"]
+tags = ["newrelic", "license", "juninmd"]
+
+[[rules]]
+id = "juninmd-sentry-dsn"
+description = "DSN do Sentry com chave publica embutida"
+regex = '''(https://[0-9a-f]{32}@[0-9a-z.-]+/[0-9]+)'''
+secretGroup = 1
+keywords = ["sentry", "https://"]
+tags = ["sentry", "dsn", "juninmd"]
+
+[[rules]]
+id = "juninmd-datadog-api-key"
+description = "API key do Datadog com prefixo dd..."
+regex = '''\b(dd[a-z]{2}_[0-9A-Za-z]{40,})\b'''
+secretGroup = 1
+entropy = 3.5
+keywords = ["dd"]
+tags = ["datadog", "api-key", "juninmd"]
+
+# --- Banco / BaaS ----------------------------------------------------------
+
+[[rules]]
+id = "juninmd-supabase-pat"
+description = "Personal access token do Supabase"
+regex = '''\b(sbp_[0-9a-z]{40})\b'''
+secretGroup = 1
+keywords = ["sbp_"]
+tags = ["supabase", "token", "juninmd"]
+
+[[rules]]
+id = "juninmd-firebase-cloud-messaging-key"
+description = "Chave legada do Firebase Cloud Messaging"
+regex = '''\b(AAAA[A-Za-z0-9_-]{7}:[A-Za-z0-9_-]{140})\b'''
+secretGroup = 1
+keywords = ["aaaa"]
+tags = ["firebase", "api-key", "juninmd"]
+
+# --- IA / LLM --------------------------------------------------------------
+
+[[rules]]
+id = "juninmd-nvidia-nim-api-key"
+description = "Chave de API do NVIDIA NIM"
+regex = '''\b(nvapi-[a-zA-Z0-9_-]{64})\b'''
+secretGroup = 1
+keywords = ["nvapi-"]
+tags = ["nvidia", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-langsmith-api-key"
+description = "Chave de API do LangSmith"
+regex = '''\b(lsv2_(?:pt|sk)_[a-f0-9]{32}_[a-f0-9]{10})\b'''
+secretGroup = 1
+keywords = ["lsv2_"]
+tags = ["langsmith", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-fireworks-api-key"
+description = "Chave de API da Fireworks AI"
+regex = '''\b(fw_[a-zA-Z0-9]{20,40})\b'''
+secretGroup = 1
+keywords = ["fw_"]
+tags = ["fireworks", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-replicate-api-token"
+description = "Token de API do Replicate"
+regex = '''\b(r8_[0-9A-Za-z-_]{37})\b'''
+secretGroup = 1
+keywords = ["r8_"]
+tags = ["replicate", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-elevenlabs-api-key"
+description = "Chave de API da ElevenLabs"
+regex = '''\b(sk_[a-f0-9]{48})\b'''
+secretGroup = 1
+entropy = 3.5
+keywords = ["sk_"]
+tags = ["elevenlabs", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-pinecone-api-key"
+description = "Chave de API do Pinecone"
+regex = '''\b(pcsk_[A-Za-z0-9]{5,6}_[A-Za-z0-9]{63})\b'''
+secretGroup = 1
+keywords = ["pcsk_"]
+tags = ["pinecone", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-wandb-api-key"
+description = "Chave de API do Weights & Biases"
+regex = '''\b(wandb_v1_[A-Za-z0-9]{27}_[A-Za-z0-9]{49})\b'''
+secretGroup = 1
+keywords = ["wandb_v1_"]
+tags = ["wandb", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-litellm-api-key"
+description = "Chave de API/virtual key do LiteLLM (contexto litellm)"
+regex = '''(?i)(?:litellm|LITELLM_(?:MASTER|API)_KEY)[\w.=\- :'"/@]{0,40}(sk-[A-Za-z0-9_-]{16,})'''
+secretGroup = 1
+entropy = 3.5
+keywords = ["litellm", "lite_llm", "x-litellm-key"]
+tags = ["litellm", "api-key", "juninmd"]
+
+  [[rules.allowlists]]
+  description = "Placeholders, chaves de exemplo e valores de documentacao"
+  regexTarget = "secret"
+  regexes = [
+    '''(?i)^sk-(?:<|your|example|placeholder|existing|1234|test|fake|dummy)''',
+    '''(?i)^sk-(?:x{8,}|0{8,})$''',
+  ]
+  stopwords = [
+    "example", "exemplo", "placeholder", "your", "virtual",
+    "existing", "1234", "fake", "dummy",
+  ]
+
+# --- Desenvolvimento / produtividade ---------------------------------------
+
+[[rules]]
+id = "juninmd-figma-pat"
+description = "Personal access token do Figma (figp_ novo e figd_ legado)"
+regex = '''(figp_[A-Za-z0-9_=-]{40,54}|figd_[A-Za-z0-9_-]{40})'''
+secretGroup = 1
+keywords = ["figp_", "figd_"]
+tags = ["figma", "token", "juninmd"]
+
+[[rules]]
+id = "juninmd-tailscale-key"
+description = "Chave de autenticacao do Tailscale"
+regex = '''\b(tskey-[a-z]+-[0-9A-Za-z_]+-[0-9A-Za-z_]+)\b'''
+secretGroup = 1
+keywords = ["tskey-"]
+tags = ["tailscale", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-infisical-token"
+description = "Service token do Infisical"
+regex = '''\b(st\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[0-9a-f]{32}(?:\.[0-9a-f]{32})?)\b'''
+secretGroup = 1
+keywords = ["st."]
+tags = ["infisical", "token", "juninmd"]
+
+[[rules]]
+id = "juninmd-cloudflare-api-token"
+description = "API token do Cloudflare no formato cfut_/cfat_"
+regex = '''\b(cf[ua]t_[a-zA-Z0-9]{40}[a-f0-9]{8})\b'''
+secretGroup = 1
+keywords = ["cfut_", "cfat_"]
+tags = ["cloudflare", "api-key", "juninmd"]
+
+# ─────────────────────────────────────────────────────────────────────
+# Provedores adicionais (regextokens + secrets-patterns-db)
+#
+# Fontes:
+#   https://github.com/odomojuli/regextokens/blob/master/patterns.json
+#   https://github.com/mazen160/secrets-patterns-db/blob/master/db/rules-stable.yml
+#   https://github.com/trufflesecurity/trufflehog/tree/main/pkg/detectors
+# ─────────────────────────────────────────────────────────────────────
+
+[[rules]]
+id = "juninmd-google-oauth-refresh-token"
+description = "Refresh token OAuth do Google (1//...)"
+regex = '''\b(1//[0-9A-Za-z_-]{43,128})\b'''
+secretGroup = 1
+keywords = ["1//"]
+tags = ["google", "oauth", "token", "juninmd"]
+
+[[rules]]
+id = "juninmd-vercel-access-token"
+description = "Access token do Vercel no formato vcp_"
+regex = '''\b(vcp_[A-Za-z0-9]{24})\b'''
+secretGroup = 1
+keywords = ["vcp_"]
+tags = ["vercel", "token", "juninmd"]
+
+[[rules]]
+id = "juninmd-wakatime-api-key"
+description = "API key do WakaTime"
+regex = '''\b(waka_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b'''
+secretGroup = 1
+keywords = ["waka_"]
+tags = ["wakatime", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-foursquare-service-key"
+description = "Service API key do Foursquare (fsq3...)"
+regex = '''\b(fsq3[0-9A-Za-z/+_-]{40,}={0,2})'''
+secretGroup = 1
+keywords = ["fsq3"]
+tags = ["foursquare", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-instagram-access-token"
+description = "Access token do Instagram (IGQ...)"
+regex = '''\b(IGQ[0-9A-Za-z_-]{100,})'''
+secretGroup = 1
+keywords = ["igq"]
+tags = ["instagram", "token", "juninmd"]
+
+[[rules]]
+id = "juninmd-amazon-mws-token"
+description = "Auth token do Amazon MWS"
+regex = '''\b(amzn\.mws\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b'''
+secretGroup = 1
+keywords = ["amzn.mws."]
+tags = ["aws", "mws", "token", "juninmd"]
+
+[[rules]]
+id = "juninmd-circleci-personal-token"
+description = "Personal API token do CircleCI (CCIPAT_)"
+regex = '''\b(CCIPAT_[1-9A-HJ-NP-Za-km-z]{20,30}_[0-9a-f]{40})\b'''
+secretGroup = 1
+keywords = ["ccipat_"]
+tags = ["circleci", "token", "juninmd"]
+
+[[rules]]
+id = "juninmd-circleci-project-token"
+description = "Project API token do CircleCI (CCIPRJ_)"
+regex = '''\b(CCIPRJ_[1-9A-HJ-NP-Za-km-z]{20,30}_[0-9a-f]{40})\b'''
+secretGroup = 1
+keywords = ["cciprj_"]
+tags = ["circleci", "token", "juninmd"]
+
+[[rules]]
+id = "juninmd-netlify-pat"
+description = "Personal access token do Netlify (nfp_)"
+regex = '''\b(nfp_[A-Za-z0-9_-]{36})\b'''
+secretGroup = 1
+keywords = ["nfp_"]
+tags = ["netlify", "token", "juninmd"]
+
+[[rules]]
+id = "juninmd-aws-appsync-key"
+description = "Chave do AWS AppSync (da2-)"
+regex = '''\b(da2-[a-z0-9]{26})\b'''
+secretGroup = 1
+keywords = ["da2-"]
+tags = ["aws", "appsync", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-adafruit-io-key"
+description = "Chave do Adafruit IO (aio_)"
+regex = '''\b(aio_[A-Za-z0-9]{28})\b'''
+secretGroup = 1
+keywords = ["aio_"]
+tags = ["adafruit", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-apify-api-key"
+description = "Chave de API do Apify"
+regex = '''\b(apify_api_[A-Za-z0-9-]{36})\b'''
+secretGroup = 1
+keywords = ["apify_api_"]
+tags = ["apify", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-fleetbase-key"
+description = "Chave live do Fleetbase"
+regex = '''\b(flb_live_[0-9A-Za-z]{20})\b'''
+secretGroup = 1
+keywords = ["flb_live_"]
+tags = ["fleetbase", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-ramp-token"
+description = "Token de API da Ramp (id ou secret)"
+regex = '''\b(ramp_(?:id|sec)_[A-Za-z0-9]{40,48})\b'''
+secretGroup = 1
+keywords = ["ramp_id_", "ramp_sec_"]
+tags = ["ramp", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-robinhood-crypto-key"
+description = "Chave da API Robinhood Crypto (rh-api-)"
+regex = '''\b(rh-api-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\b'''
+secretGroup = 1
+keywords = ["rh-api-"]
+tags = ["robinhood", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-salad-cloud-key"
+description = "Chave de API do SaladCloud"
+regex = '''\b(salad_cloud_[0-9A-Za-z]{1,7}_[0-9A-Za-z]{7,235})\b'''
+secretGroup = 1
+keywords = ["salad_cloud_"]
+tags = ["saladcloud", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-endor-labs-key"
+description = "Chave da API Endor Labs (endr+)"
+regex = '''\b(endr\+[A-Za-z0-9-]{16})\b'''
+secretGroup = 1
+keywords = ["endr+"]
+tags = ["endorlabs", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-pubnub-key"
+description = "Chave publish/subscribe do PubNub"
+regex = '''\b((?:pub|sub)-c-[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12})\b'''
+secretGroup = 1
+keywords = ["pub-c-", "sub-c-"]
+tags = ["pubnub", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-clickup-token"
+description = "Token pessoal do ClickUp (pk_<id>_<secret>)"
+regex = '''\b(pk_[0-9]{8}_[0-9A-Z]{32})\b'''
+secretGroup = 1
+keywords = ["pk_"]
+tags = ["clickup", "token", "juninmd"]
+
+[[rules]]
+id = "juninmd-cloudinary-credentials"
+description = "Credenciais embutidas em URL do Cloudinary"
+regex = '''(cloudinary://[0-9]+:[A-Za-z0-9._-]+@[A-Za-z0-9._-]+)'''
+secretGroup = 1
+keywords = ["cloudinary://"]
+tags = ["cloudinary", "credentials", "juninmd"]
+
+[[rules]]
+id = "juninmd-salesforce-oauth-token"
+description = "Access token OAuth do Salesforce (3MVG9...)"
+regex = '''\b(3MVG9[0-9A-Za-z._+/=]{80,251})\b'''
+secretGroup = 1
+keywords = ["3mvg9"]
+tags = ["salesforce", "oauth", "token", "juninmd"]
+
+[[rules]]
+id = "juninmd-salesforce-refresh-token"
+description = "Refresh token do Salesforce (5AEP861...)"
+regex = '''(?i)\b(5AEP861[0-9A-Za-z._=]{80,})\b'''
+secretGroup = 1
+keywords = ["5aep861"]
+tags = ["salesforce", "oauth", "token", "juninmd"]
+
+[[rules]]
+id = "juninmd-bitly-secret-key"
+description = "Secret key do Bitly (R_...)"
+regex = '''\b(R_[0-9a-f]{32})\b'''
+secretGroup = 1
+keywords = ["r_"]
+tags = ["bitly", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-postman-collection-key"
+description = "Collection access key do Postman (PMAT-)"
+regex = '''\b(PMAT-[0-9a-f]{24}-[0-9a-f]{34})\b'''
+secretGroup = 1
+keywords = ["pmat-"]
+tags = ["postman", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-twilio-account-sid"
+description = "Account SID do Twilio (identificador exposto)"
+regex = '''\b(AC[0-9a-fA-F]{32})\b'''
+secretGroup = 1
+keywords = ["ac"]
+tags = ["twilio", "identifier", "juninmd"]
+
+[[rules]]
+id = "juninmd-datadog-application-key"
+description = "Application key do Datadog (contexto datadog)"
+regex = '''(?i)(datadog[\w.=\- :'"]{0,25}[0-9a-f]{40})'''
+keywords = ["datadog"]
+tags = ["datadog", "api-key", "juninmd"]
+
+[[rules]]
+id = "juninmd-azure-devops-pat"
+description = "Personal access token do Azure DevOps (contexto)"
+regex = '''(?i)(?:dev\.azure\.com|visualstudio\.com|azure[_ .\-]?devops|System\.AccessToken)[\w.=\- :'"/@]{0,40}([A-Za-z0-9]{52,88})'''
+secretGroup = 1
+entropy = 3.5
+keywords = ["dev.azure.com", "visualstudio.com", "azure devops", "system.accesstoken"]
+tags = ["azure", "devops", "token", "juninmd"]
 
 # ─────────────────────────────────────────────────────────────────────
 # Allowlist global

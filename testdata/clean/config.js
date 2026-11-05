@@ -44,4 +44,12 @@ module.exports = {
   groqPlaceholder: 'gsk_<your-key-here>',
   xaiPlaceholder: 'xai-<your-key-here>',
   googleClientSecretPlaceholder: 'GOCSPX-<your-client-secret>',
+
+  // placeholders dos formatos incorporados do tokenix/TruffleHog
+  awsSecretPlaceholder: 'aws_secret_access_key = "changeme"',
+  azureStoragePlaceholder: 'AccountKey=changeme==',
+  stripeWebhookPlaceholder: 'whsec_changeme',
+  datadogPlaceholder: 'ddog_changeme',
+  supabasePlaceholder: 'sbp_changeme',
+  sentryDsnPlaceholder: 'https://<key>@example.com/0',
 };

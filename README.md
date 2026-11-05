@@ -326,7 +326,10 @@ padrão do Gitleaks com regras nascidas de vazamentos reais encontrados nos repo
 | `juninmd-google-oauth-client-secret` | `GOCSPX-...` |
 | `juninmd-authorization-header` | `Bearer …` / `Basic …` hardcoded |
 
-O ruleset padrão do Gitleaks não pegava nenhum desses casos.
+O ruleset padrão do Gitleaks não cobria vários desses formatos. O catálogo
+completo — 43 regras custom, regex, origem (tokenix, TruffleHog, Gitleaks) e os
+padrões que ficaram de fora por risco de falso positivo — está em
+[SECRET-PATTERNS.md](SECRET-PATTERNS.md).
 
 ### Sobrepor num repositório específico
 
