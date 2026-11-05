@@ -16,9 +16,9 @@ inputs:
     default: ''
   trufflehog-verify:
     description: >-
-      Verifica cada segredo ao vivo na API do provedor (--only-verified): so
+      Verifica cada segredo ao vivo na API do provedor (--results=verified): so
       credenciais AINDA ATIVAS sao reportadas. Desligue para varredura de
-      inventario (reporta segredo mesmo stale/revogado/fake).
+      inventario (--no-verification: reporta segredo mesmo stale/revogado/fake).
     required: false
     default: 'true'
   trivy-version:
@@ -155,9 +155,8 @@ runs:
         echo "$RUNNER_TEMP/sast-bin/trufflehog" >> "$GITHUB_PATH"
         echo "$RUNNER_TEMP/sast-bin/trivy" >> "$GITHUB_PATH"
 
-    # TruffleHog faz VERIFICACAO ao vivo contra a API do provedor de segredo
-    # quando fornece `--only-verified`: um segredo stale/revogado/desativado e
-    # descartado automaticamente. Sem isso, os findings tem muito ruido.
+    # O TruffleHog verifica cada credencial ao vivo contra a API do provedor:
+    # com --results=verified, segredo stale/revogado/fake e descartado.
     # O `filesystem` source varre source files atuais, sem andar por git history
     # (o historico e trabalho do reusable-security-scan / gitleaks, que faz
     # varredura incremental de PR).
@@ -175,9 +174,17 @@ runs:
         report="$RUNNER_TEMP/th-report.json"
         extra_args=( )
         if [ -n "$EXTRA_ARGS" ]; then read -ra extra_args <<< "$EXTRA_ARGS"; fi
-        if [ "$VERIFY" = "true" ]; then extra_args+=(--only-verified); fi
+        # v3.99+: nao existe mais --only-verified; o equivalente e
+        # --results=verified (so credencial confirmada pela API do provedor).
+        # Com verify=false, usa --no-verification (relatorio de inventario,
+        # inclui credencial stale/fake).
+        if [ "$VERIFY" = "true" ]; then
+          extra_args+=(--results=verified)
+        else
+          extra_args+=(--no-verification)
+        fi
 
-        trufflehog filesystem . --json --no-banner \
+        trufflehog filesystem . --json --no-update \
           "${extra_args[@]}" \
           > "$report" \
           || { status=$?; echo "::error::TruffleHog falhou (exit $status)"; exit "$status"; }
@@ -220,7 +227,7 @@ runs:
           --scanners "$SCANNERS" \
           --severity "$SEVERITY" \
           --format json --output "$report" \
-          --quiet --no-banner \
+          --quiet \
           || { status=$?; echo "::error::Trivy falhou (exit $status)"; exit "$status"; }
 
         total=$(jq '[.Results[]?.Vulnerabilities[]] | length' "$report")

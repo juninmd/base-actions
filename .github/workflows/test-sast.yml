@@ -32,9 +32,9 @@ jobs:
         with:
           persist-credentials: false
       # testdata/leaky/ contem segredos FAKE usados no teste do gitleaks: o
-      # --only-verified do TruffleHog os descarta (nao autenticam em lugar
-      # nenhum). Semgrep roda aqui em modo relatorio (sem falhar) porque regras
-      # genericas da registry podem sinalizar o corpus de teste.
+      # verify do TruffleHog (--results=verified) os descarta (nao autenticam
+      # em lugar nenhum). Semgrep roda aqui em modo relatorio (sem falhar)
+      # porque regras genericas da registry podem sinalizar o corpus de teste.
       - uses: ./sast
         with:
           trivy-severity: 'CRITICAL'
@@ -58,11 +58,11 @@ jobs:
           secret="$(openssl rand -hex 20)"
           printf 'aws_access_key_id = "AKIA%s"\n' "$keyid" > .sast-probe/credentials.tf
           printf 'aws_secret_access_key = "%s"\n' "$secret" >> .sast-probe/credentials.tf
-      # A credencial e fake: nao autentica em lugar nenhum, entao o
-      # --only-verified padrao a descartaria. O probe desliga a verificacao
-      # (trufflehog-verify false) para provar que DETECCAO barrou o formato;
-      # o comportamento de gate (so segredo vivo reprova) ja e coberto pelo
-      # proprio gate real e pelo sast-self.
+      # A credencial e fake: nao autentica em lugar nenhum, entao o modo
+      # verify padrao (--results=verified) a descartaria. O probe desliga o
+      # verify (trufflehog-verify false => --no-verification) para provar que a
+      # DETECCAO barrou o formato; o comportamento de gate (so segredo vivo
+      # reprova) ja e coberto pelo proprio gate real e pelo sast-self.
       - id: probe
         uses: ./sast
         continue-on-error: true
