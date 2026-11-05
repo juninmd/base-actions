@@ -1,0 +1,87 @@
+name: Reusable SAST
+
+on:
+  workflow_call:
+    inputs:
+      trufflehog-version:
+        description: Versao fixada do TruffleHog
+        type: string
+        required: false
+        default: '3.99.8'
+      trivy-version:
+        description: Versao fixada do Trivy
+        type: string
+        required: false
+        default: '0.76.2'
+      semgrep-version:
+        description: Versao fixada do Semgrep
+        type: string
+        required: false
+        default: '1.120.0'
+      trufflehog-args:
+        description: Args extras para o TruffleHog
+        type: string
+        required: false
+        default: ''
+      trufflehog-verify:
+        description: Verifica segredos ao vivo (so reporta credenciais ativas)
+        type: string
+        required: false
+        default: 'true'
+      trivy-scanners:
+        description: Scanners do Trivy (comma-separated)
+        type: string
+        required: false
+        default: 'vuln,secret,misconfig'
+      trivy-severity:
+        description: Severidades a reportar do Trivy
+        type: string
+        required: false
+        default: 'CRITICAL,HIGH'
+      semgrep-configs:
+        description: Registros semgrep (comma-separated)
+        type: string
+        required: false
+        default: 'p/default'
+      fail-trufflehog:
+        description: Falha o job no achado TruffleHog
+        type: boolean
+        required: false
+        default: true
+      fail-trivy:
+        description: Falha o job no achado Trivy
+        type: boolean
+        required: false
+        default: true
+      fail-semgrep:
+        description: Falha o job no achado Semgrep
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  sast:
+    name: SAST (trufflehog + trivy + semgrep)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: juninmd/base-actions/sast@main
+        with:
+          trufflehog-version: ${{ inputs.trufflehog-version }}
+          trivy-version: ${{ inputs.trivy-version }}
+          semgrep-version: ${{ inputs.semgrep-version }}
+          trufflehog-args: ${{ inputs.trufflehog-args }}
+          trufflehog-verify: ${{ inputs.trufflehog-verify }}
+          trivy-scanners: ${{ inputs.trivy-scanners }}
+          trivy-severity: ${{ inputs.trivy-severity }}
+          semgrep-configs: ${{ inputs.semgrep-configs }}
+          fail-trufflehog: ${{ inputs.fail-trufflehog }}
+          fail-trivy: ${{ inputs.fail-trivy }}
+          fail-semgrep: ${{ inputs.fail-semgrep }}

@@ -1,0 +1,125 @@
+name: Test SAST Action
+
+# Roda a action do proprio branch (./sast), nao a de @main, para que a
+# alteracao seja provada antes de virar main. As assertions olham
+# steps.probe.outcome (nao os outputs compostos): um composite action falha
+# quando algum scanner reporta achado, e continue-on-error deixa a prova
+# comparar com o esperado sem derrubar o job do teste.
+on:
+  push:
+    paths:
+      - 'sast/**'
+      - '.github/workflows/reusable-sast.yml'
+      - '.github/workflows/test-sast.yml'
+  pull_request:
+    paths:
+      - 'sast/**'
+      - '.github/workflows/reusable-sast.yml'
+      - '.github/workflows/test-sast.yml'
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sast-self:
+    name: Roda sast no proprio repositorio
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      # testdata/leaky/ contem segredos FAKE usados no teste do gitleaks: o
+      # verify do TruffleHog (--results=verified) os descarta (nao autenticam
+      # em lugar nenhum). Semgrep roda aqui em modo relatorio (sem falhar)
+      # porque regras genericas da registry podem sinalizar o corpus de teste.
+      - uses: ./sast
+        with:
+          trivy-severity: 'CRITICAL'
+          fail-semgrep: 'false'
+
+  trufflehog-fails-on-secret:
+    name: Prova que o TruffleHog barrou um segredo
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Plantar token fake com formato de GitHub PAT
+        run: |
+          set -euo pipefail
+          mkdir -p .sast-probe
+          # Detector Github do TruffleHog: ghp_[0-9a-zA-Z]{36}. O detector AWS
+          # nao disparou no v3.99.8 local, o Github sim.
+          pat="ghp_$(openssl rand -hex 18)"
+          mkdir -p .sast-probe
+          printf 'github_token = "%s"\n' "$pat" > .sast-probe/token.txt
+      # A credencial e fake: nao autentica em lugar nenhum, entao o modo
+      # verify padrao (--results=verified) a descartaria. O probe desliga o
+      # verify (trufflehog-verify false => --no-verification) para provar que a
+      # DETECCAO barrou o formato; o comportamento de gate (so segredo vivo
+      # reprova) ja e coberto pelo proprio gate real e pelo sast-self.
+      - id: probe
+        uses: ./sast
+        continue-on-error: true
+        with:
+          trufflehog-verify: 'false'
+          trivy-severity: 'CRITICAL'
+      - name: Exigir reprovacao do probe
+        if: steps.probe.outcome == 'success'
+        run: |
+          echo "::error::O sast passou com credencial fake plantada (trufflehog-findings=${{ steps.probe.outputs.trufflehog-findings }}). Nao barrou."
+          exit 1
+      - name: Resumo do probe
+        run: echo "probe outcome=failure (TruffleHog contou ${{ steps.probe.outputs.trufflehog-findings }} achado(s)). OK."
+
+  trivy-fails-on-vulnerable-dep:
+    name: Prova que o Trivy barrou dependencia vulneravel
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      # package-lock.json com lodash antigo: CVEs uns HIGH/CRITICAL. O Trivy
+      # le o lockfile direto, sem node_modules.
+      - name: Plantar package-lock com dependencia vulneravel
+        run: |
+          set -euo pipefail
+          mkdir -p .trivy-probe
+          cat > .trivy-probe/package-lock.json <<'EOF'
+          {
+            "name": "trivy-probe",
+            "version": "0.0.0",
+            "lockfileVersion": 3,
+            "requires": true,
+            "packages": {
+              "": {
+                "name": "trivy-probe",
+                "version": "0.0.0",
+                "dependencies": { "lodash": "4.17.15" }
+              },
+              "node_modules/lodash": {
+                "version": "4.17.15",
+                "resolved": "https://registry.npmjs.org/lodash/-/lodash-4.17.15.tgz",
+                "integrity": "sha512-84KYwcvsYBkFwxNy6dU3EwlTVKZtwGQ+cwJdLxrqcbVdrNua6lVBvXJgoLhKzlbMFwbEi2gT3QXJKWjTfKQow=="
+              }
+            }
+          }
+          EOF
+      - id: probe
+        uses: ./sast
+        continue-on-error: true
+        with:
+          trivy-scanners: 'vuln'
+          trivy-severity: 'HIGH,CRITICAL'
+      - name: Exigir reprovacao do probe
+        if: steps.probe.outcome == 'success'
+        run: |
+          echo "::error::O sast passou com lodash 4.17.15 (CVEs HIGH/CRITICAL) plantado. Nao barrou. Trivy contou ${{ steps.probe.outputs.trivy-findings }}."
+          exit 1
+      - name: Resumo do probe
+        run: echo "probe outcome=failure (Trivy contou ${{ steps.probe.outputs.trivy-findings }} achado(s)). OK."
