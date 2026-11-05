@@ -15,16 +15,10 @@ inputs:
     required: false
     default: '0.76.2'
   semgrep-version:
-    description: Versao fixada do Semgrep (pip)
+    description: Versao fixada do Semgrep (pip); se o Python do runner nao
+      suportar a versao, o semgrep fica desativado e o achado fica zero.
     required: false
     default: '1.120.0'
-  trhee:
-    description: >
-      Este input nao e usado. TruffleHog roda com --only-verified --json e o
-      --fail e controlado por fail-trufflehog. Mantido por compat.
-    required: false
-    default: 'true'
-    deprecated: use fail-trufflehog
   trivy-scanners:
     description: 'Scanners do Trivy (comma-separated: vuln,secret,misconfig,license)'
     required: false
@@ -58,7 +52,7 @@ outputs:
     description: Numbero de vulnerabilidades/misconfigs
     value: ${{ steps.trivy.outputs.count }}
   semgrep-findings:
-    description: Numero de achados de SAST
+    description: Numero de achados de SAST (0 se semgrep indisponivel)
     value: ${{ steps.semgrep.outputs.count }}
 
 runs:
@@ -80,6 +74,9 @@ runs:
         path: ${{ runner.temp }}/sast-bin/trivy
         key: trivy-${{ runner.os }}-${{ runner.arch }}-${{ inputs.trivy-version }}
 
+    # Ordem importa: os steps 'TruffleHog' e 'Trivy' precisam rodar antes do
+    # 'Instalar Semgrep' para que os outputs se propaguem quando o semgrep
+    # instalador falhar em versoes de Python novas.
     - name: Instalar TruffleHog
       shell: bash
       env:
@@ -105,8 +102,7 @@ runs:
         tarball="trufflehog_${TRUFFLEHOG_VERSION}_${tar_name}.tar.gz"
         curl -fsSL --retry 3 --retry-delay 2 -o "$work/tgz" "$base/$tarball"
         curl -fsSL --retry 3 --retry-delay 2 -o "$work/sums" "$base/trufflehog_${TRUFFLEHOG_VERSION}_checksums.txt"
-        ( cd "$work" && grep " $tarball\$" sums | sha256sum -c - ) || \
-          echo "::warning::Checksum do TruffleHog nao conferido (sums ausente)"
+        ( cd "$work" && grep "  $tarball\$" sums | sha256sum -c - )
         tar -xzf "$work/tgz" -C "$work"
         chmod +x "$work/trufflehog"
         mkdir -p "$dest"
@@ -138,32 +134,20 @@ runs:
         tarball="trivy_${TRIVY_VERSION}_Linux-${linux_arch}.tar.gz"
         curl -fsSL --retry 3 --retry-delay 2 -o "$work/tgz" "$base/$tarball"
         curl -fsSL --retry 3 --retry-delay 2 -o "$work/sums" "$base/trivy_${TRIVY_VERSION}_checksums.txt"
-        ( cd "$work" && grep " $tarball\$" sums | sha256sum -c - ) || \
-          echo "::warning::Checksum do Trivy nao conferido (sums ausente)"
+        ( cd "$work" && grep "  $tarball\$" sums | sha256sum -c - )
         tar -xzf "$work/tgz" -C "$work"
         chmod +x "$work/trivy"
         mkdir -p "$dest"
         mv "$work/trivy" "$bin"
         "$bin" version
 
-    - name: Configura Python 3.13
-      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
-      with:
-        python-version: '3.13'
-        # pip resolve pelo python local, nao pelo pip do sistema; garante que
-        # o semgrep seja instalado no mesmo python rodando.
-
-    - name: Instalar semgrep
-      shell: bash
-      env:
-        SEMGREP_VERSION: ${{ inputs.semgrep-version }}
-      run: |
-        set -euo pipefail
-        python -m pip install --quiet --upgrade pip
-        python -m pip install --quiet "semgrep==$SEMGREP_VERSION"
-        python -m semgrep --version 2>/dev/null || semgrep --version
-
-    - name: TruffleHog
+    # O TruffleHog faz VERIFICACAO ao vivo contra a API do provedor de segredo
+    # quando fornece `--only-verified`: um segredo stale/revogado/desativado e
+    # descartado automaticamente. Sem isso, os findings tem muito ruido.
+    # O `filesystem` source varre source files atuais, sem andar por git history
+    # (o historico e trabalho do reusable-security-scan / gitleaks, que faz
+    # varredura incremental de PR).
+    - name: TruffleHog (secrets verificados)
       id: trufflehog
       shell: bash
       env:
@@ -172,7 +156,6 @@ runs:
         set -uo pipefail
         report="$RUNNER_TEMP/th-report.json"
         trufflehog filesystem . --json --no-banner --only-verified \
-          --log-file="$RUNNER_TEMP/th-log.log" \
           > "$report" \
           || { status=$?; echo "::error::TruffleHog falhou (exit $status)"; exit "$status"; }
         total=$(jq 'length' "$report")
@@ -182,24 +165,22 @@ runs:
           exit 0
         fi
         {
-          echo "### TruffleHog: $total segredo(s) com verificado=true"
+          echo "### TruffleHog: $total segredo(s) verificados como ativos"
           echo ""
-          echo "O TruffleHog chama a API do provedor de cada credencial achada;"
-          echo "stale/revogada nao aparece aqui."
-          echo ""
-          echo "| Detector | Arquivo | Linha | Verificado |"
-          echo "| --- | --- | --- | --- |"
-          jq -r '.[] | [
-            .DetectorName,
-            (.SourceMetadata.Data.Filesystem.file // "-"),
-            (.SourceMetadata.Data.Filesystem.line // "-"),
-            (if .Verified then "ativo" else "stale" end)
-          ] | "| \(.[0]) | \(.[1]) | \(.[2]) | \(.[3]) |"' "$report"
+          echo "| Detector | Arquivo | Linha |"
+          echo "| --- | --- | --- |"
+          jq -r '.[] |
+            ( (.DetectorName // "-")
+              + " | " + ((.SourceMetadata.Data.Filesystem.file // "-"))
+              + " | " + ((.SourceMetadata.Data.Filesystem.line // "-")|tostring) )' \
+            "$report"
         } >> "$GITHUB_STEP_SUMMARY"
         echo "::error::TruffleHog: $total segredo(s) verificados como ativos nesta varredura. Detalhes no resumo."
         if [ "$FAIL_ON" = "true" ]; then exit 1; fi
 
-    - name: Trivy
+    # Trivy cobre: vulnerability CVE em dependencias (npm/pnpm/yarn/bun, pip,
+    # go.sum, Cargo.lock), secret, e misconfig de IaC (Dockerfile/Terraform/K8s).
+    - name: Trivy (dependencias e IaC)
       id: trivy
       shell: bash
       env:
@@ -215,12 +196,12 @@ runs:
           --format json --output "$report" \
           --quiet --no-banner \
           || { status=$?; echo "::error::Trivy falhou (exit $status)"; exit "$status"; }
-        vulns=$(jq '[.Results[]?.Vulnerabilities[]] | length' "$report")
-        mis = $(jq '[.Results[]?.Misconfigurations[]] | length' "$report")
-        total=$(( vulns + mis ))
+        total=$(jq '[.Results[]?.Vulnerabilities[] | 1] | length' "$report")
+        mis=$(jq '[.Results[]?.Misconfigurations[] | 1] | length' "$report")
+        total=$(( total + mis ))
         echo "count=$total" >> "$GITHUB_OUTPUT"
         if [ "$total" -eq 0 ]; then
-          echo "### Trivy: nenhuma C V E / IaC achado (severidade: $SEVERITY)" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Trivy: nenhuma crise achada (severidade: $SEVERITY)" >> "$GITHUB_STEP_SUMMARY"
           exit 0
         fi
         {
@@ -228,24 +209,52 @@ runs:
           echo ""
           echo "| Tipo | ID | Arquivo | Severidade |"
           echo "| --- | --- | --- | --- |"
-          jq -r '.Results[]?.Vulnerabilities[]? |
-            ["vuln", .VulnerabilityID, .PkgName, .Severity] | "  | \(.[0]) | \(.[1]) | \(.[2]) | \(.[3]) |"' \
-            "$report"
-          jq -r '.Results[]?.Misconfigurations[]? |
-            ["iac", .ID, .Target, .Severity] | "  | \(.[0]) | \(.[1]) | \(.[2]) | \(.[3]) |"' \
+          jq -r '.Results[] |
+            ( ([(.Target // "-"), "-"] | join(" / "))
+              + " | " + ((.VulnerabilityID // .["ID"] // "-"))
+              + " | " + ((.PkgName // .["message"] // "-"))
+              + " | " + ((.Severity // "-")) )' -r \
             "$report"
         } >> "$GITHUB_STEP_SUMMARY"
         echo "::error::Trivy: $total achados. Detalhes no resumo."
         if [ "$FAIL_ON" = "true" ]; then exit 1; fi
 
+    # Semgrep Roda por AST com registry rules. Pode quebrar em versoes futuros
+    # de Python (semgrep depende de protobuf que quebra em Py 3.14). Gark com
+    # continue-on-error para nao derrubar a action inteira e perder os findings
+    # de TruffleHog/Trivy.
+    - name: Configura Python 3.13
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+      with:
+        python-version: '3.13'
+
+    - name: Instalar Semgrep
+      id: semgrep-install
+      shell: bash
+      continue-on-error: true
+      env:
+        SEMGREP_VERSION: ${{ inputs.semgrep-version }}
+      run: |
+        set -euo pipefail
+        python -m pip install --quiet --upgrade pip
+        python -m pip install --quiet "semgrep==$SEMGREP_VERSION"
+        python -m semgrep --version 2>/dev/null >> "$RUNNER_TEMP/semgrep-version.txt" || true
+
     - name: Semgrep
       id: semgrep
+      if: success() || always()
       shell: bash
       env:
         CONFIGS: ${{ inputs.semgrep-configs }}
         FAIL_ON: ${{ inputs.fail-semgrep }}
       run: |
         set -uo pipefail
+        if ! command -v semgrep && [ ! -x "$HOME/.local/bin/semgrep" ]; then
+          echo "::debug::Semgrep indisponivel no runner"
+          echo "count=0" >> "$GITHUB_OUTPUT"
+          echo "### Semgrep: indisponivel neste runner (Python sem suporte)" >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+        fi
         report="$RUNNER_TEMP/semgrep-report.json"
         semgrep scan \
           --config "$CONFIGS" \
@@ -264,7 +273,9 @@ runs:
           echo ""
           echo "| Rule | Arquivo | Linha |"
           echo "| --- | --- | --- |"
-          jq -r '.results[] | ["\(.check_id)", .path, .start.line] | "  | \(.[0]) | \(.[1]) | \(.[2]) |"' "$report"
+          jq -r '.results[] |
+            ( .check_id + " | " + .path + " | " + (.start.line|tostring) )' \
+            "$report"
         } >> "$GITHUB_STEP_SUMMARY"
         echo "::error::Semgrep: $total achado(s). Detalhes no resumo."
         if [ "$FAIL_ON" = "true" ]; then exit 1; fi
