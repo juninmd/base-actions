@@ -10,6 +10,10 @@ inputs:
     description: Versao fixada do TruffleHog
     required: false
     default: '3.99.8'
+  trufflehog-args:
+    description: Args extras para o TruffleHog
+    required: false
+    default: ''
   trivy-version:
     description: Versao fixada do Trivy
     required: false
@@ -151,11 +155,15 @@ runs:
       id: trufflehog
       shell: bash
       env:
+        EXTRA_ARGS: ${{ inputs.trufflehog-args }}
         FAIL_ON: ${{ inputs.fail-trufflehog }}
       run: |
         set -uo pipefail
         report="$RUNNER_TEMP/th-report.json"
+        extra_args=( )
+        if [ -n "$EXTRA_ARGS" ]; then read -ra extra_args <<< "$EXTRA_ARGS"; fi
         trufflehog filesystem . --json --no-banner --only-verified \
+          "${extra_args[@]}" \
           > "$report" \
           || { status=$?; echo "::error::TruffleHog falhou (exit $status)"; exit "$status"; }
         total=$(jq 'length' "$report")
