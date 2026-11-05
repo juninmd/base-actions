@@ -23,6 +23,11 @@ on:
         type: string
         required: false
         default: ''
+      trufflehog-verify:
+        description: Verifica segredos ao vivo (so reporta credenciais ativas)
+        type: string
+        required: false
+        default: 'true'
       trivy-scanners:
         description: Scanners do Trivy (comma-separated)
         type: string
@@ -73,6 +78,7 @@ jobs:
           trivy-version: ${{ inputs.trivy-version }}
           semgrep-version: ${{ inputs.semgrep-version }}
           trufflehog-args: ${{ inputs.trufflehog-args }}
+          trufflehog-verify: ${{ inputs.trufflehog-verify }}
           trivy-scanners: ${{ inputs.trivy-scanners }}
           trivy-severity: ${{ inputs.trivy-severity }}
           semgrep-configs: ${{ inputs.semgrep-configs }}

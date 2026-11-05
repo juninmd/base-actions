@@ -14,6 +14,13 @@ inputs:
     description: Args extras para o TruffleHog
     required: false
     default: ''
+  trufflehog-verify:
+    description: >-
+      Verifica cada segredo ao vivo na API do provedor (--only-verified): so
+      credenciais AINDA ATIVAS sao reportadas. Desligue para varredura de
+      inventario (reporta segredo mesmo stale/revogado/fake).
+    required: false
+    default: 'true'
   trivy-version:
     description: Versao fixada do Trivy
     required: false
@@ -140,6 +147,14 @@ runs:
         chmod +x "$bin"
         "$bin" version
 
+    # O binario mora em subdiretorio do RUNNER_TEMP; cada um no proprio diretorio
+    # (cache independente), entao os DOIS precisam ir para o PATH.
+    - name: Adicionar binarios ao PATH
+      shell: bash
+      run: |
+        echo "$RUNNER_TEMP/sast-bin/trufflehog" >> "$GITHUB_PATH"
+        echo "$RUNNER_TEMP/sast-bin/trivy" >> "$GITHUB_PATH"
+
     # TruffleHog faz VERIFICACAO ao vivo contra a API do provedor de segredo
     # quando fornece `--only-verified`: um segredo stale/revogado/desativado e
     # descartado automaticamente. Sem isso, os findings tem muito ruido.
@@ -153,14 +168,16 @@ runs:
       shell: bash
       env:
         EXTRA_ARGS: ${{ inputs.trufflehog-args }}
+        VERIFY: ${{ inputs.trufflehog-verify }}
         FAIL_ON: ${{ inputs.fail-trufflehog }}
       run: |
         set -uo pipefail
         report="$RUNNER_TEMP/th-report.json"
         extra_args=( )
         if [ -n "$EXTRA_ARGS" ]; then read -ra extra_args <<< "$EXTRA_ARGS"; fi
+        if [ "$VERIFY" = "true" ]; then extra_args+=(--only-verified); fi
 
-        trufflehog filesystem . --json --no-banner --only-verified \
+        trufflehog filesystem . --json --no-banner \
           "${extra_args[@]}" \
           > "$report" \
           || { status=$?; echo "::error::TruffleHog falhou (exit $status)"; exit "$status"; }
