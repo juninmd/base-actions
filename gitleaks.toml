@@ -209,12 +209,19 @@ tags = ["token", "juninmd"]
 # O Google AI Studio passou a emitir chaves `AQ.Ab...` (Auth key) no lugar
 # das `AIza...` (Standard key). A regra `gcp-api-key` do ruleset padrao so
 # conhece AIza, entao sem esta regra a chave nova passa inteira.
+#
+# Formato real: 53 caracteres (`AQ.Ab` + 48 base64url). O detector oficial do
+# Google (osv-scalibr) exige `AQ.Ab8R`; aqui o ancora e `AQ.Ab` + 30 ou mais
+# para nao perder chaves com outro marcador de versao nem copias truncadas em
+# log/print (o valor completo no texto original costuma vir cortado).
 # Ref: https://ai.google.dev/gemini-api/docs/api-key
+#      https://github.com/google/osv-scalibr/blob/main/veles/secrets/gcpexpressmode/detector.go
+#      https://github.com/trufflesecurity/trufflehog/pull/5440
 # ─────────────────────────────────────────────────────────────────────
 [[rules]]
 id = "juninmd-google-gemini-auth-key"
 description = "Chave de autenticacao do Google Gemini no formato AQ.Ab..."
-regex = '''\b(AQ\.Ab[A-Za-z0-9_\-]{30,})(?:[\x60'"\s;]|\\[nr]|$)'''
+regex = '''\b(AQ\.Ab[A-Za-z0-9_\-]{30,})(?:[^A-Za-z0-9_\-]|$)'''
 secretGroup = 1
 keywords = ["aq.ab"]
 tags = ["api-key", "google", "gemini", "juninmd"]
@@ -223,7 +230,7 @@ tags = ["api-key", "google", "gemini", "juninmd"]
   description = "Placeholders, valores de exemplo e interpolacao"
   regexTarget = "secret"
   regexes = [
-    '''(?i)^AQ\.Ab(?:[x*]+|example|placeholder|your|fake|dummy)''',
+    '''(?i)^AQ\.Ab(?:x{8,}|\*{8,}|example|placeholder|your|fake|dummy)$''',
   ]
   stopwords = ["example", "exemplo", "placeholder", "your", "fake", "dummy"]
 
@@ -231,15 +238,20 @@ tags = ["api-key", "google", "gemini", "juninmd"]
 # Chaves de API de provedores de IA ainda ausentes do ruleset padrao
 #
 # OpenRouter: sk-or-v1- + 64 hex
-# Groq:       gsk_ + 48 alfanumericos
+# Groq:       gsk_ + 48 a 52 alfanumericos
 # xAI/Grok:   xai- + 80 alfanumericos
+#
+# Groq aceita 48 e 52 porque o PR aberto no gitleaks usa 48 e o detector do
+# TruffleHog usa 52; as duas larguras ja foram emitidas pela Groq.
 # Ref: https://github.com/gitleaks/gitleaks/pull/2181
+#      https://github.com/gitleaks/gitleaks/pull/2310
 #      https://github.com/gitleaks/gitleaks/issues/2309
+#      https://github.com/trufflesecurity/trufflehog/blob/main/pkg/detectors/groq/groq.go
 # ─────────────────────────────────────────────────────────────────────
 [[rules]]
 id = "juninmd-openrouter-api-key"
 description = "Chave de API do OpenRouter (sk-or-v1-...)"
-regex = '''\b(sk-or-v1-[a-f0-9]{64})(?:[\x60'"\s;]|\\[nr]|$)'''
+regex = '''\b(sk-or-v1-[a-f0-9]{64})(?:[^A-Za-z0-9]|$)'''
 secretGroup = 1
 keywords = ["sk-or-v1-"]
 tags = ["api-key", "openrouter", "juninmd"]
@@ -248,14 +260,14 @@ tags = ["api-key", "openrouter", "juninmd"]
   description = "Placeholders e valores de exemplo"
   regexTarget = "secret"
   regexes = [
-    '''(?i)^sk-or-v1-(?:x{8,}|0{8,}|example|placeholder)''',
+    '''(?i)^sk-or-v1-(?:x{8,}|0{8,}|example|placeholder)$''',
   ]
   stopwords = ["example", "exemplo", "placeholder", "your", "fake", "dummy"]
 
 [[rules]]
 id = "juninmd-groq-api-key"
 description = "Chave de API da Groq (gsk_...)"
-regex = '''\b(gsk_[A-Za-z0-9]{48})(?:[\x60'"\s;]|\\[nr]|$)'''
+regex = '''\b(gsk_[A-Za-z0-9]{48,52})(?:[^A-Za-z0-9]|$)'''
 secretGroup = 1
 keywords = ["gsk_"]
 tags = ["api-key", "groq", "juninmd"]
@@ -264,14 +276,14 @@ tags = ["api-key", "groq", "juninmd"]
   description = "Placeholders e valores de exemplo"
   regexTarget = "secret"
   regexes = [
-    '''(?i)^gsk_(?:x{8,}|0{8,}|example|placeholder)''',
+    '''(?i)^gsk_(?:x{8,}|0{8,}|example|placeholder)$''',
   ]
   stopwords = ["example", "exemplo", "placeholder", "your", "fake", "dummy"]
 
 [[rules]]
 id = "juninmd-xai-api-key"
 description = "Chave de API da xAI/Grok (xai-...)"
-regex = '''\b(xai-[A-Za-z0-9]{80})(?:[\x60'"\s;]|\\[nr]|$)'''
+regex = '''\b(xai-[A-Za-z0-9]{80})(?:[^A-Za-z0-9]|$)'''
 secretGroup = 1
 keywords = ["xai-"]
 tags = ["api-key", "xai", "juninmd"]
@@ -280,7 +292,7 @@ tags = ["api-key", "xai", "juninmd"]
   description = "Placeholders e valores de exemplo"
   regexTarget = "secret"
   regexes = [
-    '''(?i)^xai-(?:x{8,}|0{8,}|example|placeholder)''',
+    '''(?i)^xai-(?:x{8,}|0{8,}|example|placeholder)$''',
   ]
   stopwords = ["example", "exemplo", "placeholder", "your", "fake", "dummy"]
 
@@ -294,7 +306,7 @@ tags = ["api-key", "xai", "juninmd"]
 [[rules]]
 id = "juninmd-google-oauth-client-secret"
 description = "Client secret do Google OAuth (GOCSPX-...)"
-regex = '''\b(GOCSPX-[A-Za-z0-9_\-]{20,})(?:[\x60'"\s;]|\\[nr]|$)'''
+regex = '''\b(GOCSPX-[A-Za-z0-9_\-]{20,})(?:[^A-Za-z0-9_\-]|$)'''
 secretGroup = 1
 keywords = ["gocspx-"]
 tags = ["api-key", "google", "oauth", "juninmd"]
