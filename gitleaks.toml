@@ -39,6 +39,17 @@ tags = ["password", "juninmd"]
     '''(?i)^\$?\{?\s*(?:process\.env|os\.environ|env|secrets|vault|config)[.\[]''',
     '''^\$\{[^}]*\}$''',
     '''^\$\{\{.*\}\}$''',
+    '''^\$[A-Za-z_][A-Za-z0-9_]*$''',
+    '''^\w+:\$[A-Za-z_][A-Za-z0-9_]*$''',
+    ''':char:''',
+    '''\.\./''',
+    '''\s''',
+    '''\(''',
+    '''\)''',
+    '''\{''',
+    '''\}''',
+    '''\[''',
+    '''\]''',
     '''^<[^>]*>$''',
     '''^%[A-Za-z_]+%$''',
     '''^\*+$''',
@@ -852,7 +863,7 @@ tags = ["azure", "devops", "token", "juninmd"]
 [[rules]]
 id = "juninmd-env-secret-assignment"
 description = "Credencial atribuida a variavel de ambiente explicita (token/api key/secret/session/cookie)"
-regex = '''(?i)\b(?:[A-Z0-9]+_)*(?:TOKEN|API_KEY|SECRET|ACCESS_KEY|CLIENT_SECRET|API_HASH|SESSION|COOKIES)\s*[:=]\s*["']?[A-Za-z0-9_\-\.+/=:]{20,}["']?'''
+regex = '''(?i)\b(?:[A-Z0-9]+_)*(?:TOKEN|API_KEY|SECRET|ACCESS_KEY|CLIENT_SECRET|API_HASH|SESSION|COOKIES)\s*[:=]\s*["']?[A-Za-z0-9_\-\.+/=:]{20,}(?:["']|\s|$)'''
 entropy = 3.0
 keywords = ["token", "api_key", "secret", "access_key", "client_secret", "api_hash", "session", "cookies"]
 tags = ["env", "secret", "juninmd"]
@@ -864,6 +875,12 @@ tags = ["env", "secret", "juninmd"]
     '''(?i)(?:process\.env|os\.environ|\$\{|<[^>]+>|%[A-Z_]+%)''',
     '''(?i)(?:example|exemplo|placeholder|changeme|change_me|dummy|sample|redacted|your[_-])''',
     '''(?i)(?:x{8,}|0{8,}|\*{6,})''',
+    '''\(''',
+    '''\)''',
+    '''\{''',
+    '''\}''',
+    '''\[''',
+    '''\]''',
   ]
   stopwords = [
     "example", "exemplo", "placeholder", "your", "changeme", "change_me",
