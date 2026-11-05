@@ -76,6 +76,9 @@ RUNTIME_LEAKS = {
     "juninmd-wandb-api-key": (
         "wandb_v1_" + fixture("wandb-id", 27) + "_" + fixture("wandb-secret", 49)
     ),
+    "juninmd-litellm-api-key": (
+        "litellm_api_key = 'sk-" + fixture("litellm", 32) + "'"
+    ),
     # cloud / infra
     "juninmd-aws-access-key-id-extra": "AGPA" + fixture("aws-extra", 16).upper(),
     "juninmd-aws-secret-access-key": (
@@ -141,6 +144,52 @@ RUNTIME_LEAKS = {
     "juninmd-infisical-token": (
         "st." + uuid_hex("infisical") + "." + fixture("infisical-secret", 32)
     ),
+    # provedores adicionais (regextokens/secrets-patterns-db)
+    "juninmd-google-oauth-refresh-token": "1//" + fixture("google-refresh", 64),
+    "juninmd-vercel-access-token": "vcp_" + fixture("vercel", 24),
+    "juninmd-wakatime-api-key": "waka_" + uuid_hex("wakatime"),
+    "juninmd-foursquare-service-key": "fsq3" + fixture("foursquare", 48),
+    "juninmd-instagram-access-token": "IGQ" + fixture("instagram", 120),
+    "juninmd-amazon-mws-token": "amzn.mws." + uuid_hex("amazon-mws"),
+    "juninmd-circleci-personal-token": (
+        "CCIPAT_"
+        + from_alphabet("circleci-id", 24, RESEND_ALPHABET)
+        + "_"
+        + fixture("circleci-secret", 40)
+    ),
+    "juninmd-circleci-project-token": (
+        "CCIPRJ_"
+        + from_alphabet("circleci-project-id", 24, RESEND_ALPHABET)
+        + "_"
+        + fixture("circleci-project-secret", 40)
+    ),
+    "juninmd-netlify-pat": "nfp_" + fixture("netlify", 36),
+    "juninmd-aws-appsync-key": "da2-" + fixture("appsync", 26),
+    "juninmd-adafruit-io-key": "aio_" + fixture("adafruit", 28),
+    "juninmd-apify-api-key": "apify_api_" + fixture("apify", 36),
+    "juninmd-fleetbase-key": "flb_live_" + fixture("fleetbase", 20),
+    "juninmd-ramp-token": "ramp_sec_" + fixture("ramp", 48),
+    "juninmd-robinhood-crypto-key": "rh-api-" + uuid_hex("robinhood"),
+    "juninmd-salad-cloud-key": "salad_cloud_abc_" + fixture("saladcloud", 40),
+    "juninmd-endor-labs-key": "endr+" + fixture("endor", 16),
+    "juninmd-pubnub-key": "pub-c-" + uuid_hex("pubnub"),
+    "juninmd-clickup-token": "pk_12345678_" + fixture("clickup", 32).upper(),
+    "juninmd-cloudinary-credentials": (
+        "cloudinary://123456789012345:" + fixture("cloudinary", 20) + "@my-cloud"
+    ),
+    "juninmd-salesforce-oauth-token": "3MVG9" + fixture("salesforce-oauth", 120),
+    "juninmd-salesforce-refresh-token": "5AEP861" + fixture("salesforce-refresh", 100),
+    "juninmd-bitly-secret-key": "R_" + fixture("bitly", 32),
+    "juninmd-postman-collection-key": (
+        "PMAT-" + fixture("postman-id", 24) + "-" + fixture("postman-secret", 34)
+    ),
+    "juninmd-twilio-account-sid": "AC" + fixture("twilio-sid", 32),
+    "juninmd-datadog-application-key": (
+        "datadog_application_key = '" + fixture("datadog-app", 40) + "'"
+    ),
+    "juninmd-azure-devops-pat": (
+        "System.AccessToken = '" + fixture("azure-devops", 84) + "'"
+    ),
 }
 
 
@@ -198,10 +247,38 @@ EXPECTED = {
     "juninmd-elevenlabs-api-key",
     "juninmd-pinecone-api-key",
     "juninmd-wandb-api-key",
+    "juninmd-litellm-api-key",
     "juninmd-figma-pat",
     "juninmd-tailscale-key",
     "juninmd-infisical-token",
     "juninmd-cloudflare-api-token",
+    "juninmd-google-oauth-refresh-token",
+    "juninmd-vercel-access-token",
+    "juninmd-wakatime-api-key",
+    "juninmd-foursquare-service-key",
+    "juninmd-instagram-access-token",
+    "juninmd-amazon-mws-token",
+    "juninmd-circleci-personal-token",
+    "juninmd-circleci-project-token",
+    "juninmd-netlify-pat",
+    "juninmd-aws-appsync-key",
+    "juninmd-adafruit-io-key",
+    "juninmd-apify-api-key",
+    "juninmd-fleetbase-key",
+    "juninmd-ramp-token",
+    "juninmd-robinhood-crypto-key",
+    "juninmd-salad-cloud-key",
+    "juninmd-endor-labs-key",
+    "juninmd-pubnub-key",
+    "juninmd-clickup-token",
+    "juninmd-cloudinary-credentials",
+    "juninmd-salesforce-oauth-token",
+    "juninmd-salesforce-refresh-token",
+    "juninmd-bitly-secret-key",
+    "juninmd-postman-collection-key",
+    "juninmd-twilio-account-sid",
+    "juninmd-datadog-application-key",
+    "juninmd-azure-devops-pat",
 }
 
 

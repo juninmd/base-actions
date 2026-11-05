@@ -12,15 +12,19 @@ com entropia ou palavra-chave próxima.
 | Gitleaks default | ruleset curado, com allowlists e entropia | 222 regras | https://github.com/gitleaks/gitleaks/blob/master/config/gitleaks.toml |
 | tokenix | regras de referência do `scan-secrets` | 63 regras | https://github.com/juninmd/tokenix/blob/main/assets/secret-rules/default.toml |
 | TruffleHog | detectores por provedor, com regex e verificação | 893 detectores | https://github.com/trufflesecurity/trufflehog/tree/main/pkg/detectors |
+| regextokens | catálogo RE2-safe com 109 padrões e 64 provedores | 109 regras | https://github.com/odomojuli/regextokens/blob/master/patterns.json |
+| secrets-patterns-db | maior base aberta de regex de secrets | 1600+ padrões | https://github.com/mazen160/secrets-patterns-db/blob/master/db/rules-stable.yml |
+| LiteLLM docs | formato de master key e virtual keys (`sk-...`) | documentação | https://docs.litellm.ai/docs/proxy/virtual_keys |
 | detect-secrets (Yelp) | plugins de detecção | 28 arquivos | https://github.com/Yelp/detect-secrets/tree/master/detect_secrets/plugins |
 | secretlint | regras por provedor | 39 regras | https://github.com/secretlint/secretlint/tree/master/packages/%40secretlint |
 
 ## Cobertura atual
 
 - `gitleaks.toml` estende o ruleset padrão com `useDefault = true`.
-- 43 regras custom: 6 nascidas de vazamentos reais, 5 de Gemini/provedores de IA
-  e 32 incorporadas nesta rodada a partir do tokenix/TruffleHog.
-- Total efetivo: **222 padrão + 43 custom = 265 regras**.
+- 71 regras custom: 6 nascidas de vazamentos reais, 5 de Gemini/provedores de IA
+  e 60 incorporadas das bases pesquisadas (tokenix, TruffleHog, regextokens e
+  secrets-patterns-db), cobrindo mais de 50 provedores novos.
+- Total efetivo: **222 padrão + 71 custom = 293 regras**.
 
 ## Regras custom deste repositório
 
@@ -69,6 +73,34 @@ com entropia ou palavra-chave próxima.
 | `juninmd-tailscale-key` | Chave de autenticacao do Tailscale | TruffleHog |
 | `juninmd-infisical-token` | Service token do Infisical | TruffleHog |
 | `juninmd-cloudflare-api-token` | API token do Cloudflare no formato cfut_/cfat_ | TruffleHog |
+| `juninmd-google-oauth-refresh-token` | Refresh token OAuth do Google (1//...) | regextokens |
+| `juninmd-vercel-access-token` | Access token do Vercel no formato vcp_ | regextokens |
+| `juninmd-wakatime-api-key` | API key do WakaTime | regextokens |
+| `juninmd-foursquare-service-key` | Service API key do Foursquare (fsq3...) | regextokens |
+| `juninmd-instagram-access-token` | Access token do Instagram (IGQ...) | regextokens |
+| `juninmd-amazon-mws-token` | Auth token do Amazon MWS | regextokens |
+| `juninmd-circleci-personal-token` | Personal API token do CircleCI (CCIPAT_) | regextokens |
+| `juninmd-circleci-project-token` | Project API token do CircleCI (CCIPRJ_) | regextokens |
+| `juninmd-netlify-pat` | Personal access token do Netlify (nfp_) | regextokens |
+| `juninmd-aws-appsync-key` | Chave do AWS AppSync (da2-) | secrets-patterns-db |
+| `juninmd-adafruit-io-key` | Chave do Adafruit IO (aio_) | secrets-patterns-db |
+| `juninmd-apify-api-key` | Chave de API do Apify | secrets-patterns-db |
+| `juninmd-fleetbase-key` | Chave live do Fleetbase | secrets-patterns-db |
+| `juninmd-ramp-token` | Token de API da Ramp (id ou secret) | TruffleHog |
+| `juninmd-robinhood-crypto-key` | Chave da API Robinhood Crypto (rh-api-) | TruffleHog |
+| `juninmd-salad-cloud-key` | Chave de API do SaladCloud | TruffleHog |
+| `juninmd-endor-labs-key` | Chave da API Endor Labs (endr+) | TruffleHog |
+| `juninmd-pubnub-key` | Chave publish/subscribe do PubNub | TruffleHog |
+| `juninmd-clickup-token` | Token pessoal do ClickUp (pk_<id>_<secret>) | secrets-patterns-db |
+| `juninmd-cloudinary-credentials` | Credenciais embutidas em URL do Cloudinary | secrets-patterns-db |
+| `juninmd-salesforce-oauth-token` | Access token OAuth do Salesforce (3MVG9...) | TruffleHog |
+| `juninmd-salesforce-refresh-token` | Refresh token do Salesforce (5AEP861...) | TruffleHog |
+| `juninmd-bitly-secret-key` | Secret key do Bitly (R_...) | secrets-patterns-db |
+| `juninmd-postman-collection-key` | Collection access key do Postman (PMAT-) | regextokens |
+| `juninmd-twilio-account-sid` | Account SID do Twilio (identificador exposto) | tokenix |
+| `juninmd-datadog-application-key` | Application key do Datadog (contexto datadog) | regextokens |
+| `juninmd-azure-devops-pat` | Personal access token do Azure DevOps (contexto) | regextokens |
+| `juninmd-litellm-api-key` | Chave de API/virtual key do LiteLLM (contexto litellm) | LiteLLM docs |
 
 ## Padrões pesquisados que ficaram fora
 
