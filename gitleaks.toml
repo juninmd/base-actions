@@ -482,7 +482,10 @@ tags = ["sonar", "token", "juninmd"]
 [[rules]]
 id = "juninmd-newrelic-license-key"
 description = "License key do New Relic"
-regex = '''\b([0-9a-f]{40}NRAL)\b'''
+# Chave de 40 caracteres: 36 alfanumericos (conta/regiao + hex) e o sufixo
+# literal NRAL. O tokenix traz {40} antes do NRAL, o que daria 44 e nao casa
+# com nenhuma chave real emitida.
+regex = '''\b([0-9a-z]{36}NRAL)\b'''
 secretGroup = 1
 keywords = ["nral"]
 tags = ["newrelic", "license", "juninmd"]
@@ -492,17 +495,8 @@ id = "juninmd-sentry-dsn"
 description = "DSN do Sentry com chave publica embutida"
 regex = '''(https://[0-9a-f]{32}@[0-9a-z.-]+/[0-9]+)'''
 secretGroup = 1
-keywords = ["sentry", "https://"]
+keywords = ["sentry"]
 tags = ["sentry", "dsn", "juninmd"]
-
-[[rules]]
-id = "juninmd-datadog-api-key"
-description = "API key do Datadog com prefixo dd..."
-regex = '''\b(dd[a-z]{2}_[0-9A-Za-z]{40,})\b'''
-secretGroup = 1
-entropy = 3.5
-keywords = ["dd"]
-tags = ["datadog", "api-key", "juninmd"]
 
 # --- Banco / BaaS ----------------------------------------------------------
 
@@ -836,21 +830,6 @@ regex = '''\b(PMAT-[0-9a-f]{24}-[0-9a-f]{34})\b'''
 secretGroup = 1
 keywords = ["pmat-"]
 tags = ["postman", "api-key", "juninmd"]
-
-[[rules]]
-id = "juninmd-twilio-account-sid"
-description = "Account SID do Twilio (identificador exposto)"
-regex = '''\b(AC[0-9a-fA-F]{32})\b'''
-secretGroup = 1
-keywords = ["ac"]
-tags = ["twilio", "identifier", "juninmd"]
-
-[[rules]]
-id = "juninmd-datadog-application-key"
-description = "Application key do Datadog (contexto datadog)"
-regex = '''(?i)(datadog[\w.=\- :'"]{0,25}[0-9a-f]{40})'''
-keywords = ["datadog"]
-tags = ["datadog", "api-key", "juninmd"]
 
 [[rules]]
 id = "juninmd-azure-devops-pat"
