@@ -77,7 +77,7 @@ RUNTIME_LEAKS = {
         "wandb_v1_" + fixture("wandb-id", 27) + "_" + fixture("wandb-secret", 49)
     ),
     "juninmd-litellm-api-key": (
-        "litellm_api_key = 'sk-" + fixture("litellm", 32) + "'"
+        "LITELLM_KEY=sk-" + fixture("litellm", 16)
     ),
     # cloud / infra
     "juninmd-aws-access-key-id-extra": "AGPA" + fixture("aws-extra", 16).upper(),
@@ -185,6 +185,30 @@ RUNTIME_LEAKS = {
     "juninmd-azure-devops-pat": (
         "System.AccessToken = '" + fixture("azure-devops", 84) + "'"
     ),
+    # casos encontrados na auditoria dos .env locais (valores ficticios)
+    "juninmd-hardcoded-password": "POSTGRES_PASSWORD=" + fixture("unquoted-password", 24),
+    "juninmd-db-uri-credentials": (
+        "DATABASE_URL=postgresql://fakeuser:p@"
+        + fixture("db-password", 12)
+        + "@fakehost.example.com:5432/app"
+    ),
+    "juninmd-env-secret-assignment": (
+        "SERVICE_API_KEY=" + fixture("generic-env-secret", 32)
+    ),
+    "juninmd-bcrypt-password-hash": (
+        "APP_PASSWORD_HASH=$2b$12$"
+        + from_alphabet(
+            "bcrypt",
+            53,
+            "./ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789",
+        )
+    ),
+    "juninmd-youtube-cookies": (
+        "YOUTUBE_COOKIES_BASE64=" + fixture("youtube-cookies", 200)
+    ),
+    "juninmd-vibecode-api-key": (
+        "VIBE_CODE_API_KEY=" + fixture("vibecode", 16)
+    ),
 }
 
 
@@ -271,6 +295,10 @@ EXPECTED = {
     "juninmd-bitly-secret-key",
     "juninmd-postman-collection-key",
     "juninmd-azure-devops-pat",
+    "juninmd-env-secret-assignment",
+    "juninmd-bcrypt-password-hash",
+    "juninmd-youtube-cookies",
+    "juninmd-vibecode-api-key",
 }
 
 
