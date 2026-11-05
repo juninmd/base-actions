@@ -27,7 +27,7 @@ useDefault = true
 [[rules]]
 id = "juninmd-hardcoded-password"
 description = "Senha literal atribuida no codigo (nao vem de variavel de ambiente)"
-regex = '''(?i)["']?(?:password|passwd|pwd|senha|db_pass)["']?\s*[:=]\s*["']([^"'\n]{6,80})["']'''
+regex = '''(?i)["']?(?:password|passwd|pwd|senha|db_pass)["']?\s*[:=]\s*["']?([^"'\n]{6,80})["']?'''
 secretGroup = 1
 keywords = ["password", "passwd", "pwd", "senha", "db_pass"]
 tags = ["password", "juninmd"]
@@ -38,6 +38,7 @@ tags = ["password", "juninmd"]
   regexes = [
     '''(?i)^\$?\{?\s*(?:process\.env|os\.environ|env|secrets|vault|config)[.\[]''',
     '''^\$\{[^}]*\}$''',
+    '''^\$\{\{.*\}\}$''',
     '''^<[^>]*>$''',
     '''^%[A-Za-z_]+%$''',
     '''^\*+$''',
@@ -94,7 +95,7 @@ tags = ["database", "juninmd"]
 [[rules]]
 id = "juninmd-db-uri-credentials"
 description = "URI de conexao com usuario e senha embutidos"
-regex = '''(?i)\b(?:mysql|mariadb|postgres(?:ql)?|mongodb(?:\+srv)?|redis|rediss|amqps?|ftp|mssql|clickhouse)://[^\s:/@'"]+:([^\s@'"]{3,})@[^\s/'"]+'''
+regex = '''(?i)\b(?:mysql|mariadb|postgres(?:ql)?|mongodb(?:\+srv)?|redis|rediss|amqps?|ftp|mssql|clickhouse)://[^\s:/@'"]+:([^\s/'"]{3,})@[^\s/'"]+'''
 secretGroup = 1
 keywords = ["mysql://", "mariadb://", "postgres", "mongodb", "redis://", "rediss://", "amqp://", "amqps://", "ftp://", "mssql://", "clickhouse://"]
 tags = ["database", "credentials", "juninmd"]
@@ -578,9 +579,9 @@ tags = ["wandb", "api-key", "juninmd"]
 [[rules]]
 id = "juninmd-litellm-api-key"
 description = "Chave de API/virtual key do LiteLLM (contexto litellm)"
-regex = '''(?i)(?:litellm|LITELLM_(?:MASTER|API)_KEY)[\w.=\- :'"/@]{0,40}(sk-[A-Za-z0-9_-]{16,})'''
+regex = '''(?i)(?:litellm|LITELLM_(?:MASTER_|API_)?KEY)[\w.=\- :'"/@]{0,40}(sk-[A-Za-z0-9_-]{15,})'''
 secretGroup = 1
-entropy = 3.5
+entropy = 3.0
 keywords = ["litellm", "lite_llm", "x-litellm-key"]
 tags = ["litellm", "api-key", "juninmd"]
 
@@ -839,6 +840,57 @@ secretGroup = 1
 entropy = 3.5
 keywords = ["dev.azure.com", "visualstudio.com", "azure devops", "system.accesstoken"]
 tags = ["azure", "devops", "token", "juninmd"]
+
+# ---------------------------------------------------------------------
+# Fallback para credenciais atribuidas a variaveis de ambiente
+#
+# Cobre valores opacos que nao tem prefixo publico conhecido, mas cujo
+# proprio nome da variavel declara que e token/api key/secret/session/cookie.
+# O match inteiro (nome + valor) evita que a allowlist global de hash 40/64
+# hex silencie chaves como GITHUB_CLIENT_SECRET e VIRUSTOTAL_API_KEY.
+# ---------------------------------------------------------------------
+[[rules]]
+id = "juninmd-env-secret-assignment"
+description = "Credencial atribuida a variavel de ambiente explicita (token/api key/secret/session/cookie)"
+regex = '''(?i)\b(?:[A-Z0-9]+_)*(?:TOKEN|API_KEY|SECRET|ACCESS_KEY|CLIENT_SECRET|API_HASH|SESSION|COOKIES)\s*[:=]\s*["']?[A-Za-z0-9_\-\.+/=:]{20,}["']?'''
+entropy = 3.0
+keywords = ["token", "api_key", "secret", "access_key", "client_secret", "api_hash", "session", "cookies"]
+tags = ["env", "secret", "juninmd"]
+
+  [[rules.allowlists]]
+  description = "Placeholders, referencias a ambiente e exemplos"
+  regexTarget = "match"
+  regexes = [
+    '''(?i)(?:process\.env|os\.environ|\$\{|<[^>]+>|%[A-Z_]+%)''',
+    '''(?i)(?:example|exemplo|placeholder|changeme|change_me|dummy|sample|redacted|your[_-])''',
+    '''(?i)(?:x{8,}|0{8,}|\*{6,})''',
+  ]
+  stopwords = [
+    "example", "exemplo", "placeholder", "your", "changeme", "change_me",
+    "dummy", "sample", "redacted", "existing", "virtual", "1234",
+  ]
+
+[[rules]]
+id = "juninmd-bcrypt-password-hash"
+description = "Hash bcrypt de senha exposto em configuracao"
+regex = '''(\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53})\b'''
+secretGroup = 1
+keywords = ["$2a$", "$2b$", "$2y$"]
+tags = ["password", "hash", "juninmd"]
+
+[[rules]]
+id = "juninmd-youtube-cookies"
+description = "Cookies de sessao do YouTube exportados em base64"
+regex = '''(?i)((?:SHORTS_GENERATOR_)?YOUTUBE_COOKIES(?:_BASE64)?\s*[:=]\s*["']?[A-Za-z0-9_\-\.%+/=]{100,}["']?)'''
+keywords = ["youtube_cookies", "youtube_cookies_base64"]
+tags = ["youtube", "cookies", "session", "juninmd"]
+
+[[rules]]
+id = "juninmd-vibecode-api-key"
+description = "Chave de API do Vibe Code"
+regex = '''(?i)(VIBE_CODE_API_KEY\s*[:=]\s*["']?[A-Za-z0-9_\-\.+/=]{12,}["']?)'''
+keywords = ["vibe_code_api_key"]
+tags = ["vibecode", "api-key", "juninmd"]
 
 # ─────────────────────────────────────────────────────────────────────
 # Allowlist global

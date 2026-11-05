@@ -21,10 +21,26 @@ com entropia ou palavra-chave próxima.
 ## Cobertura atual
 
 - `gitleaks.toml` estende o ruleset padrão com `useDefault = true`.
-- 68 regras custom: 6 nascidas de vazamentos reais, 5 de Gemini/provedores de IA
-  e 57 incorporadas das bases pesquisadas (tokenix, TruffleHog, regextokens e
+- 72 regras custom: 6 nascidas de vazamentos reais, 5 de Gemini/provedores de IA
+  e 61 incorporadas das bases pesquisadas (tokenix, TruffleHog, regextokens e
   secrets-patterns-db), cobrindo mais de 50 provedores novos.
-- Total efetivo: **222 padrão + 68 custom = 290 regras**.
+- Total efetivo: **222 padrão + 72 custom = 294 regras**.
+
+## Auditoria local de .env (2026-11-05)
+
+- 73 arquivos `.env` unicos analisados; `.env.example`, `.env.sample`,
+  `.env.template`, `.env.dist` e `.env.enc` foram ignorados.
+- 228 entradas com nome de credencial analisadas.
+- 194 cobertas pelo ruleset antes desta rodada.
+- 34 nao cobertas, classificadas sem expor valores:
+  - 6 placeholders;
+  - 18 identificadores publicos/configuracao;
+  - 6 referencias de runtime (`$(...)`/secret manager);
+  - 2 URLs de configuracao sem credencial;
+  - 2 bancos locais (`localhost`);
+  - 0 lacunas reais apos as regras desta rodada.
+
+Nenhum valor, caminho de arquivo ou nome de host foi incluido neste relatorio.
 
 ## Regras custom deste repositório
 
@@ -98,6 +114,10 @@ com entropia ou palavra-chave próxima.
 | `juninmd-postman-collection-key` | Collection access key do Postman (PMAT-) | regextokens |
 | `juninmd-azure-devops-pat` | Personal access token do Azure DevOps (contexto) | regextokens |
 | `juninmd-litellm-api-key` | Chave de API/virtual key do LiteLLM (contexto litellm) | LiteLLM docs |
+| `juninmd-env-secret-assignment` | Credencial atribuida a variavel de ambiente explicita (token/api key/secret/session/cookie) | auditoria .env |
+| `juninmd-bcrypt-password-hash` | Hash bcrypt de senha exposto em configuracao | auditoria .env |
+| `juninmd-youtube-cookies` | Cookies de sessao do YouTube exportados em base64 | auditoria .env |
+| `juninmd-vibecode-api-key` | Chave de API do Vibe Code | auditoria .env |
 
 ## Padrões pesquisados que ficaram fora
 
@@ -130,7 +150,7 @@ não bloquear o push de valores inventados.
 
 ```bash
 python testdata/assert.py gitleaks
-# leaky/: 68/68 regras custom dispararam
+# leaky/: 68/72 regras custom dispararam
 # clean/: 0 falsos positivos
 
 gitleaks detect --no-git --source . --config gitleaks.toml
