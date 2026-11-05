@@ -281,7 +281,9 @@ runs:
         SEMGREP_VERSION: ${{ inputs.semgrep-version }}
       run: |
         set -euo pipefail
-        python -m pip install --quiet --upgrade pip
+        # semgrep importa pkg_resources (setuptools), que deixou de vir
+        # embarcado no venv do hostedtoolcache; <81 porque a 81 removeu.
+        python -m pip install --quiet --upgrade pip "setuptools<81"
         python -m pip install --quiet "semgrep==$SEMGREP_VERSION"
         python -m semgrep --version
 
