@@ -189,7 +189,10 @@ runs:
           > "$report" \
           || { status=$?; echo "::error::TruffleHog falhou (exit $status)"; exit "$status"; }
 
-        total=$(jq 'length' "$report")
+        # --json emite JSONL (um objeto por achado); sem achado, o arquivo sai
+        # VAZIO (os logs vao para stderr). jq -s 'length' cobre os dois casos:
+        # vazio => 0, JSONL => contagem.
+        total=$(jq -s 'length' "$report")
         echo "count=$total" >> "$GITHUB_OUTPUT"
 
         if [ "$total" -eq 0 ]; then
@@ -200,10 +203,9 @@ runs:
             echo ""
             echo "| Detector | Arquivo | Linha |"
             echo "| --- | --- | --- |"
-            jq -r '.[] |
-              ((.DetectorName // "?") + " | "
-              + ((.SourceMetadata.Data.Filesystem.file // "-")) + " | "
-              + ((.SourceMetadata.Data.Filesystem.line // 0)|tostring))' \
+            jq -r '(.DetectorName // "?") + " | "
+              + (.SourceMetadata.Data.Filesystem.file // "-") + " | "
+              + ((.SourceMetadata.Data.Filesystem.line // 0)|tostring)' \
               "$report"
           } >> "$GITHUB_STEP_SUMMARY"
           echo "::error::TruffleHog: $total segredo(s) ativos. Detalhes no resumo."

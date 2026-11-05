@@ -48,16 +48,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - name: Plantar credencial fake com formato de AWS key
+      - name: Plantar token fake com formato de GitHub PAT
         run: |
           set -euo pipefail
           mkdir -p .sast-probe
-          # TruffleHog AWS detector: AKIA[0-9A-Z]{16}; openssl rand e lowercase,
-          # entao forca uppercase. O secret padrao do detector sao 40 chars.
-          keyid="$(openssl rand -hex 8 | tr '[:lower:]' '[:upper:]')"
-          secret="$(openssl rand -hex 20)"
-          printf 'aws_access_key_id = "AKIA%s"\n' "$keyid" > .sast-probe/credentials.tf
-          printf 'aws_secret_access_key = "%s"\n' "$secret" >> .sast-probe/credentials.tf
+          # Detector Github do TruffleHog: ghp_[0-9a-zA-Z]{36}. O detector AWS
+          # nao disparou no v3.99.8 local, o Github sim.
+          pat="ghp_$(openssl rand -hex 18)"
+          mkdir -p .sast-probe
+          printf 'github_token = "%s"\n' "$pat" > .sast-probe/token.txt
       # A credencial e fake: nao autentica em lugar nenhum, entao o modo
       # verify padrao (--results=verified) a descartaria. O probe desliga o
       # verify (trufflehog-verify false => --no-verification) para provar que a
