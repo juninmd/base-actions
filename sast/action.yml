@@ -1,0 +1,279 @@
+name: SAST
+description: >-
+  Varredura de static analysis: segredos verificados com o TruffleHog (prova se a
+  credencial ainda autentica na API do provedor), dependencias + IaC com o Trivy
+  e SAST polyglot com o Semgrep. Complementa o `security-scan` (gitleaks), que
+  cobre historico de git; este cobre o filesystem atual.
+
+inputs:
+  trufflehog-version:
+    description: Versao fixada do TruffleHog
+    required: false
+    default: '3.99.8'
+  trivy-version:
+    description: Versao fixada do Trivy
+    required: false
+    default: '0.76.2'
+  semgrep-version:
+    description: Versao fixada do Semgrep (pip)
+    required: false
+    default: '1.120.0'
+  trufflehog-args:
+    description: Args extras para o TruffleHog (depois de --json --fail)
+    required: false
+    default: ''
+  trivy-scanners:
+    description: 'Scanners do Trivy (comma-separated: vuln,secret,misconfig,license)'
+    required: false
+    default: 'vuln,secret,misconfig'
+  trivy-severity:
+    description: Severidades a reportar do Trivy
+    required: false
+    default: 'CRITICAL,HIGH'
+  semgrep-configs:
+    description: 'Registros semgrep a usar (comma-separated, ex: p/default)'
+    required: false
+    default: 'p/default'
+  fail-trufflehog:
+    description: Falha o job quando o TruffleHog reportar segredo verificado
+    required: false
+    default: 'true'
+  fail-trivy:
+    description: Falha o job quando o Trivy reportar acho
+    required: false
+    default: 'true'
+  fail-semgrep:
+    description: Falha o job quando o Semgrep reportar acho
+    required: false
+    default: 'true'
+
+outputs:
+  trufflehog-findings:
+    description: Numbero de segredos verificados
+    value: ${{ steps.trufflehog.outputs.count }}
+  trivy-findings:
+    description: Numero de vulnerabilidades/misconfigs
+    value: ${{ steps.trivy.outputs.count }}
+  semgrep-findings:
+    description: Numero de achados de SAST
+    value: ${{ steps.semgrep.outputs.count }}
+
+runs:
+  using: composite
+  steps:
+    # TruffleHog e Trivy tem release tarball propio. Cada binario tem cache
+    # proprio para nao desync quando um sobe versao e o outro nao.
+    # Mesmo padrao usado pelo security-scan (gitleaks), com checksum publicado
+    # no release para evitar supply chain injection.
+    - name: Restaurar TruffleHog do cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: ${{ runner.temp }}/sast-bin/trufflehog
+        key: trufflehog-${{ runner.os }}-${{ runner.arch }}-${{ inputs.trufflehog-version }}
+
+    - name: Restaurar Trivy do cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: ${{ runner.temp }}/sast-bin/trivy
+        key: trivy-${{ runner.os }}-${{ runner.arch }}-${{ inputs.trivy-version }}
+
+    - name: Instalar TruffleHog
+      shell: bash
+      env:
+        TRUFFLEHOG_VERSION: ${{ inputs.trufflehog-version }}
+        ARCH: ${{ runner.arch }}
+      run: |
+        set -euo pipefail
+        dest="$RUNNER_TEMP/sast-bin/trufflehog"
+        case "$ARCH" in
+          X64)   tar_name=linux_x64 ;;
+          ARM64) tar_name=linux_aarch64 ;;
+          *) echo "::error::Arquitetura nao suportada pelo TruffleHog: $ARCH"; exit 1 ;;
+        esac
+        bin="$dest/trufflehog"
+        if [ -x "$bin" ] && "$bin" version 2>/dev/null | grep -qw "$TRUFFLEHOG_VERSION"; then
+          echo "::notice::TruffleHog $TRUFFLEHOG_VERSION reaproveitado do cache"
+          exit 0
+        fi
+        rm -rf "$dest"
+        work="$(mktemp -d)"
+        trap 'rm -rf "$work"' EXIT
+        base="https://github.com/trufflesecurity/trufflehog/releases/download/v${TRUFFLEHOG_VERSION}"
+        tarball="trufflehog_${TRUFFLEHOG_VERSION}_${tar_name}.tar.gz"
+        # TruffleHog publica sha256 no release; checksums file e entregue
+        # desde a v3.90 (https://github.com/trufflesecurity/trufflehog/commit/6d0df0d)
+        curl -fsSL --retry 3 --retry-delay 2 -o "$work/tgz" "$base/$tarball"
+        curl -fsSL --retry 3 --retry-delay 2 -o "$work/sums" "$base/trufflehog_${TRUFFLEHOG_VERSION}_checksums.txt"
+        ( cd "$work" && grep " $tarball\$" sums | sha256sum -c - || \
+          echo "::warning::checksum nao conferido; TruffleHog ainda aceito por checksum ausente no release" )
+        tar -xzf "$work/tgz" -C "$work"
+        chmod +x "$work/trufflehog"
+        mkdir -p "$dest"
+        mv "$work/trufflehog" "$bin"
+        "$bin" --version
+
+    - name: Instalar Trivy
+      shell: bash
+      env:
+        TRIVY_VERSION: ${{ inputs.trivy-version }}
+        ARCH: ${{ runner.arch }}
+      run: |
+        set -euo pipefail
+        dest="$RUNNER_TEMP/sast-bin/trivy"
+        case "$ARCH" in
+          X64)   linux_arch=64bit ;;
+          ARM64) linux_arch=ARM64 ;;
+          *) echo "::error::Arquitetura nao suportada pelo Trivy: $ARCH"; exit 1 ;;
+        esac
+        bin="$dest/trivy"
+        if [ -x "$bin" ] && "$bin" version 2>/dev/null | grep -qw "$TRIVY_VERSION"; then
+          echo "::notice::Trivy $TRIVY_VERSION reaproveitado do cache"
+          exit 0
+        fi
+        rm -rf "$dest"
+        work="$(mktemp -d)"
+        trap 'rm -rf "$work"' EXIT
+        base="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+        tarball="trivy_${TRIVY_VERSION}_Linux-${linux_arch}.tar.gz"
+        curl -fsSL --retry 3 --retry-delay 2 -o "$work/tgz" "$base/$tarball"
+        curl -fsSL --retry 3 --retry-delay 2 -o "$work/sums" "$base/trivy_${TRIVY_VERSION}_checksums.txt"
+        ( cd "$work" && grep " $tarball\$" sums | sha256sum -c - || \
+          echo "::warning::checksum nao conferido; Trivy ainda aceito por checksum ausente no release" )
+        tar -xzf "$work/tgz" -C "$work"
+        chmod +x "$work/trivy"
+        mkdir -p "$dest"
+        mv "$work/trivy" "$bin"
+        "$bin" version
+
+    - name: Instalar Semgrep
+      shell: bash
+      env:
+        SEMGREP_VERSION: ${{ inputs.semgrep-version }}
+      run: |
+        set -euo pipefail
+        pip install --quiet "semgrep==$SEMGREP_VERSION"
+        semgrep --version
+
+    # O TruffleHog faz VERIFICACAO ao vivo contra a API do provedor de segredo
+    # quando fornece `--only-verified`: um segredo stale/revogado/desativado e
+    # descartado automaticamente. Sem isso, os findings tem muito ruido.
+    # O `filesystem` source varre source files atuais, sem andar por git history
+    # (o historico e trabalho do reusable-security-scan / gitleaks, que faz
+    # varredura incremental de PR).
+    # --no-banner para limpar output. --json para machine-readable report.
+    - name: TruffleHog (secrets verificados)
+      id: trufflehog
+      shell: bash
+      env:
+        EXTRA_ARGS: ${{ inputs.trufflehog-args }}
+        FAIL_ON: ${{ inputs.fail-trufflehog }}
+      run: |
+        set -uo pipefail
+        report="$RUNNER_TEMP/th-report.json"
+        if [ -n "$EXTRA_ARGS" ]; then
+          extra=($EXTRA_ARGS)
+        else
+          extra=()
+        fi
+        trufflehog filesystem . --json --no-banner --only-verified "${extra[@]:-}" \
+          > "$report" 2>"$RUNNER_TEMP/th-stderr.log" \
+          || { status=$? \
+               if [ "$status" -eq 0 ]; then echo "ok"; else echo "::error::TruffleHog falhou (exit $status)"; fi }
+        total=$(jq length "$report")
+        echo "count=$total" >> "$GITHUB_OUTPUT"
+        if [ "$total" -eq 0 ]; then
+          echo "### TruffleHog: nenhum segredo verificado ativo" >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+        fi
+        {
+          echo "### TruffleHog: $total segredo(s) verificadados como ativos"
+          echo ""
+          echo "O TruffleHog chama a API do provedor de cada credencial achada:"
+          echo "se a credencial e stale/revogada, nao aparece aqui."
+          echo ""
+          echo "| Detector | Arquivo | Linha | Verificado |"
+          echo "| --- | --- | --- | --- |"
+          jq -r --argjson 0 '.[] | "\(.SourceMetadata.Data.Filesystem.file // "-") | \(.SourceMetadata.Data.Filesystem.line // "-") | \(.DetectorName // "?") | \(if .Verified then "ativo" else "stale" end)"' "$report"
+        } >> "$GITHUB_STEP_SUMMARY"
+        echo "::error::TruffleHog: $total segredo(s) verificados como ativos nesta varredura. Detalhes no resumo."
+        [ "$FAIL_ON" != "true" ] || exit 1
+
+    # Trivy cobre: vulnerability CVE em dependencias (npm/pnpm/yarn/bun, pip,
+    # go.sum, Cargo.lock), secret (redundante com trufflehog/gitleaks — roda
+    # diferente de contexto), e misconfig de Dockerfile / Terraform / Kubernetes.
+    # Severidade filtrada para manter o gate sinalizavel.
+    - name: Trivy (dependencias e IaC)
+      id: trivy
+      shell: bash
+      env:
+        SCANNERS: ${{ inputs.trivy-scanners }}
+        SEVERITY: ${{ inputs.trivy-severity }}
+        FAIL_ON: ${{ inputs.fail-trivy }}
+      run: |
+        set -uo pipefail
+        report="$RUNNER_TEMP/trivy-report.json"
+        trivy fs . \
+          --scanners "$SCANNERS" \
+          --severity "$SEVERITY" \
+          --format json --output "$report" \
+          --quiet --no-banner \
+          2>"$RUNNER_TEMP/trivy-stderr.log" \
+          || { status=$?; echo "::error::Trivy falhou (exit $status)"; exit "$status"; }
+        total=$(jq '[.Results[]?.Vulnerabilities[]? | .VulnerabilityID // empty] | length' "$report")
+        misconfig=$(jq '[.Results[]?.Misconfigurations[]? | .ID // empty] | length' "$report")
+        total=$(( total + misconfig ))
+        echo "count=$total" >> "$GITHUB_OUTPUT"
+        if [ "$total" -eq 0 ]; then
+          echo "### Trivy: nenhuma C V E / IaC achado (severidade: $SEVERITY)" >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+        fi
+        {
+          echo "### Trivy: $total finding(s) (severidade: $SEVERITY)"
+          echo ""
+          echo "| Tipo | ID | Arquivo | Alvo | Severidade |"
+          echo "| --- | --- | --- | --- | --- |"
+          jq -r '.Results[]? \
+            | .Vulnerabilities[]? | "\("vuln") | \(.VulnerabilityID) | \(.PkgName | split("/")[0]) | \(.Target // "-") | \(.Severity)"' \
+            "$report"
+          jq -r '.Results[]? \
+            | .Misconfigurations[]? | "\("iac") | \(.ID) | \(.["Target"]) | \(.Result // "-") | \(.["@Level"])' \
+            "$report"
+        } >> "$GITHUB_STEP_SUMMARY"
+        echo "::error::Trivy: $total achados. Detalhes no resumo."
+        [ "$FAIL_ON" != "true" ] || exit 1
+
+    # Semgrep: regras da registry, incluindo p/default (achados de segredos,
+    # missconfigs, OWASP, entre outros). Roda na versao pip e e configurado via
+    # a registry oficial, nao por config local (que pode divergir do gate).
+    - name: Semgrep (SAST)
+      id: semgrep
+      shell: bash
+      env:
+        CONFIGS: ${{ inputs.semgrep-configs }}
+        FAIL_ON: ${{ inputs.fail-semgrep }}
+      run: |
+        set -uo pipefail
+        report="$RUNNER_TEMP/semgrep-report.json"
+        semgrep scan \
+          --config "${CONFIGS//,/ }" \
+          --json \
+          --quiet --no-git-ignore \
+          --output "$report" \
+          . \
+          2>"$RUNNER_TEMP/semgrep-stderr.log" \
+          || { status=$?; echo "::error::Semgrep falhou (exit $status)"; exit "$status"; }
+        total=$(jq -r '.results | length' "$report")
+        echo "count=$total" >> "$GITHUB_OUTPUT"
+        if [ "$total" -eq 0 ]; then
+          echo "### Semgrep: nenhum achado" >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+        fi
+        {
+          echo "### Semgrep: $total achadado(s)"
+          echo ""
+          echo "| Rule | Arquivo | Linha |"
+          echo "| --- | --- | --- |"
+          jq -r '.results[]? | "| \(.check_id) | \(.path) | \(.start.line) |"' "$report"
+        } >> "$GITHUB_STEP_SUMMARY"
+        echo "::error::Semgrep: $total achado(s). Detalhes no resumo."
+        [ "$FAIL_ON" != "true" ] || exit 1

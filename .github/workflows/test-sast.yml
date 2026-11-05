@@ -1,0 +1,120 @@
+name: Test SAST Action
+
+on:
+  push:
+    paths:
+      - 'sast/**'
+      - '.github/workflows/reusable-sast.yml'
+      - '.github/workflows/test-sast.yml'
+  pull_request:
+    paths:
+      - 'sast/**'
+      - '.github/workflows/reusable-sast.yml'
+      - '.github/workflows/test-sast.yml'
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  sast-self:
+    name: Roda sast no proprio repositorio
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./sast
+        with:
+          trivy-severity: 'CRITICAL'
+
+  detects-planted-secret:
+    name: Prova que o TruffleHog barrou um segredo
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Plantar secret AWS access key fake (satisfa o formato do detector)
+        run: |
+          set -euo pipefail
+          mkdir -p .sast-probe
+          access_id=$(openssl rand -hex 8)
+          # AKIA[0-9A-Z]{16}: formato de access key id da AWS, com validacao ao vivo
+          # que identificaria credentials que rodem de verdade.
+          printf 'aws_access_key_id = "AKIA%s"\n' "$access_id" > .sast-probe/credentials.tf
+          printf 'provider "aws" {}\nresource "aws_s3_bucket" "b" { bucket = "probe-%s" }\n' "$access_id" >> .sast-probe/credentials.tf
+          git -c user.email=ci@example.com -c user.name=ci add -f .sast-probe/credentials.tf
+          git -c user.email=ci@example.com -c user.name=ci commit -q -m 'sast: plantar credencial fake para o teste'
+
+      - id: probe
+        uses: ./sast
+        continue-on-error: true
+        with:
+          trivy-scanners: 'vuln'
+
+      - name: Exigir reprovacao por achado TruffleHog
+        env:
+          TH: ${{ steps.probe.outputs.trufflehog-findings }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TH" ] || [ "$TH" -lt 1 ]; then
+            echo "::error::TruffleHog devia reportar ao menos 1 credencial viva (achado=$TH). Nao reportou."
+            exit 1
+          fi
+          echo "TruffleHog barrou $TH credencial(is) plantada(s). OK."
+
+  trivy-reports-vulns-if-dependency-is-old:
+    name: Prova que o Trivy barrou dependencia vulneravel
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      # O go.mod do proprio repositorio nao tem dependencia community CT. Criamos
+      # um go.mod temporario com uma dependencia sofreiva de CVE, para provar que o
+      # Trivy consegue atrar.
+      - name: Plantar go.mod com dependencia CVE
+        run: |
+          set -euo pipefail
+          mkdir -p .trivy-probe
+          cat > .trivy-probe/go.mod <<EOF
+          module example.com/trivy-probe
+          go 1.21
+          require github.com/dgrijalva/jwt-go v3.2.0+incompatible
+          EOF
+          git -c user.email=ci@example.com -c user.name=ci add -f .trivy-probe/go.mod
+          git -c user.email=ci@example.com -c user.name=ci commit -q -m 'sast: plantar go.mod com dependencia vuln para o teste'
+
+      - id: probe
+        uses: ./sast
+        continue-on-error: true
+        with:
+          # path forcar o scan no subdiretorio com o go.mod plantado
+          trivy-scanners: 'vuln'
+          trivy-severity: 'HIGH,CRITICAL'
+          trufflehog-args: '--no-verify'  # trufflehog scan e desligado aqui, foco no trivy
+          fail-trufflehog: 'false'
+
+      - name: Exigir reprovacao por achado Trivy
+        env:
+          TRIVY: ${{ steps.probe.outputs.trivy-findings }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TRIVY" ] || [ "$TRIVY" -lt 1 ]; then
+            echo "::error::Trivy devia reportar ao menos 1 C V E para o go.mod vulneravel (achado=$TRIVY)."
+            exit 1
+          fi
+          echo "Trivy barrou $TRIVY vulnerabilidade(s). OK."
