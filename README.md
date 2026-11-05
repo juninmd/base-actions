@@ -319,6 +319,11 @@ padrão do Gitleaks com regras nascidas de vazamentos reais encontrados nos repo
 | `juninmd-db-uri-credentials` | `mysql://user:senha@host`, `postgres://`, `mongodb://`, `amqp://`… |
 | `juninmd-internal-hostname` | host de rede interna (`*.intranet`, `*.corp`, `*.internal`, `*.lan`) |
 | `juninmd-aws-rds-endpoint` | endpoint de RDS / Redshift / ElastiCache |
+| `juninmd-google-gemini-auth-key` | chave nova do Gemini/AI Studio (`AQ.Ab...`); o padrão só pega `AIza...` |
+| `juninmd-openrouter-api-key` | `sk-or-v1-...` |
+| `juninmd-groq-api-key` | `gsk_...` |
+| `juninmd-xai-api-key` | `xai-...` (xAI/Grok) |
+| `juninmd-google-oauth-client-secret` | `GOCSPX-...` |
 | `juninmd-authorization-header` | `Bearer …` / `Basic …` hardcoded |
 
 O ruleset padrão do Gitleaks não pegava nenhum desses casos.

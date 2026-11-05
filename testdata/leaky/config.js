@@ -26,4 +26,13 @@ module.exports = {
 
   // LEAK: juninmd-authorization-header
   auth: 'Bearer ZDE3ZjkzMGI5NjU4MWUzOThjYWMwZTMyZWMxMjRjZmE=',
+
+  // LEAK: juninmd-google-gemini-auth-key
+  geminiApiKey: 'AQ.AbtB0CfNqitLNUsVJCizMeNA7OTGkxjWN1qZCC',
+
+  // LEAK: juninmd-groq-api-key
+  groqApiKey: 'gsk_iZRYj1MgANOkB3tk8QVVWDMYulkbtr58v3dF0eEK49lEk1Jy',
+
+  // LEAK: juninmd-google-oauth-client-secret
+  googleClientSecret: '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',
 };
