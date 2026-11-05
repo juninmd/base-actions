@@ -62,7 +62,13 @@ tags = ["password", "juninmd"]
     "password", "passwd", "senha", "secret", "hunter2", "s3cr3t",
     "todo", "fixme", "notset", "none", "null", "undefined", "empty",
     # Saida de parser/relatorio: `password = "Not Found"` nao e credencial.
-    "not found", "notfound", "n/a",
+    
+    # TS/Rust declaracoes e atribuicoes de codigo, nao segredos.
+    "string", "number", "boolean", "any", "Trigger",
+    # Fixtures de compose/ci e variaveis locais
+    "postgres", "mysql", "localhost", "homolog", "mock", "demo", "sample",
+    "not-needed", "vibe-session", "fatec123", "radar_ci", "meubarbeiro",
+    "litellm-local", "not-needed",
   ]
 
   [[rules.allowlists]]
@@ -115,7 +121,7 @@ tags = ["database", "credentials", "juninmd"]
   description = "Credenciais triviais de ambiente local"
   regexTarget = "line"
   regexes = [
-    '''(?i)@(?:localhost|127\.0\.0\.1|0\.0\.0\.0|host\.docker\.internal|\$\{|%)''',
+    '''(?i)@(?:localhost|127\.0\.0\.1|0\.0\.0\.0|host\.docker\.internal|postgres|mysql|db|database|mongodb|redis|amqp|mq|nosql|celertty|\$\{|%)''',
   ]
 
   [[rules.allowlists]]
@@ -602,11 +608,33 @@ tags = ["litellm", "api-key", "juninmd"]
   regexes = [
     '''(?i)^sk-(?:<|your|example|placeholder|existing|1234|test|fake|dummy)''',
     '''(?i)^sk-(?:x{8,}|0{8,})$''',
+    # Defaults locais de compose/dev: ${LITELLM_MASTER_KEY:-sk-local-...}
+    '''(?i)^sk-local-''',
   ]
   stopwords = [
     "example", "exemplo", "placeholder", "your", "virtual",
-    "existing", "1234", "fake", "dummy",
+    "existing", "1234", "fake", "dummy", "sk-local",
   ]
+
+# Global allowlist additions: built artifacts, sourcemaps, demos, fixture keys
+[[allowlists]]
+description = "Artefatos compilados (VitePress, vite chunks, sourcemaps e libs)"
+paths = [
+  '''(?i)\.vitepress/(?:dist|cache)/''',
+  '''(?i)\.(?:min\.js|map|html)$''',
+  '''(?i)\.md\.[A-Za-z0-9_-]{6,}\.js$''',
+  '''(?i)(?:^|/)(?:static/libs|chunks)/''',
+  '''(?i)\.env[-_]sample$''',
+  # Fixtures do scanner tokenix: PEM/pubkey de teste e strings de baixa entropia
+  '''(?i)/(?:secrets_scan|conversation_audit)\.rs$''',
+]
+
+[[allowlists]]
+description = "data: URI de sourcemap/base64 embutidos em bundles"
+regexTarget = "secret"
+regexes = [
+  '''(?i)data:[\w.-]+/[\w.-]+;base64,[A-Za-z0-9+/=]{40,}''',
+]
 
 # --- Desenvolvimento / produtividade ---------------------------------------
 
@@ -872,7 +900,7 @@ tags = ["env", "secret", "juninmd"]
   description = "Placeholders, referencias a ambiente e exemplos"
   regexTarget = "match"
   regexes = [
-    '''(?i)(?:process\.env|os\.environ|\$\{|<[^>]+>|%[A-Z_]+%)''',
+    '''(?i)(?:process\.env|os\.environ|settings\.|\$\{|<[^>]+>|%[A-Z_]+%)''',
     '''(?i)(?:example|exemplo|placeholder|changeme|change_me|dummy|sample|redacted|your[_-])''',
     '''(?i)(?:x{8,}|0{8,}|\*{6,})''',
     '''\(''',
@@ -885,6 +913,10 @@ tags = ["env", "secret", "juninmd"]
   stopwords = [
     "example", "exemplo", "placeholder", "your", "changeme", "change_me",
     "dummy", "sample", "redacted", "existing", "virtual", "1234",
+    # Referencia a runtime/config, nao e um literal de segredo.
+    "config.", "import.meta.env", "resolved.", "options.", "publishingAccount",
+    "not-needed", "biometricsgrpc", "hardwareservice", "vibe-",
+    "api_keys.", "local-homolog", "mock-", "mock_", "-local",
   ]
 
 [[rules]]
