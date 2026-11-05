@@ -21,10 +21,10 @@ com entropia ou palavra-chave próxima.
 ## Cobertura atual
 
 - `gitleaks.toml` estende o ruleset padrão com `useDefault = true`.
-- 71 regras custom: 6 nascidas de vazamentos reais, 5 de Gemini/provedores de IA
-  e 60 incorporadas das bases pesquisadas (tokenix, TruffleHog, regextokens e
+- 68 regras custom: 6 nascidas de vazamentos reais, 5 de Gemini/provedores de IA
+  e 57 incorporadas das bases pesquisadas (tokenix, TruffleHog, regextokens e
   secrets-patterns-db), cobrindo mais de 50 provedores novos.
-- Total efetivo: **222 padrão + 71 custom = 293 regras**.
+- Total efetivo: **222 padrão + 68 custom = 290 regras**.
 
 ## Regras custom deste repositório
 
@@ -59,7 +59,6 @@ com entropia ou palavra-chave próxima.
 | `juninmd-sonarcloud-token` | Token do SonarCloud no formato sqco_ | TruffleHog |
 | `juninmd-newrelic-license-key` | License key do New Relic | tokenix |
 | `juninmd-sentry-dsn` | DSN do Sentry com chave publica embutida | tokenix |
-| `juninmd-datadog-api-key` | API key do Datadog com prefixo dd... | tokenix |
 | `juninmd-supabase-pat` | Personal access token do Supabase | tokenix |
 | `juninmd-firebase-cloud-messaging-key` | Chave legada do Firebase Cloud Messaging | tokenix |
 | `juninmd-nvidia-nim-api-key` | Chave de API do NVIDIA NIM | TruffleHog |
@@ -97,8 +96,6 @@ com entropia ou palavra-chave próxima.
 | `juninmd-salesforce-refresh-token` | Refresh token do Salesforce (5AEP861...) | TruffleHog |
 | `juninmd-bitly-secret-key` | Secret key do Bitly (R_...) | secrets-patterns-db |
 | `juninmd-postman-collection-key` | Collection access key do Postman (PMAT-) | regextokens |
-| `juninmd-twilio-account-sid` | Account SID do Twilio (identificador exposto) | tokenix |
-| `juninmd-datadog-application-key` | Application key do Datadog (contexto datadog) | regextokens |
 | `juninmd-azure-devops-pat` | Personal access token do Azure DevOps (contexto) | regextokens |
 | `juninmd-litellm-api-key` | Chave de API/virtual key do LiteLLM (contexto litellm) | LiteLLM docs |
 
@@ -133,7 +130,7 @@ não bloquear o push de valores inventados.
 
 ```bash
 python testdata/assert.py gitleaks
-# leaky/: 43/43 regras custom dispararam
+# leaky/: 68/68 regras custom dispararam
 # clean/: 0 falsos positivos
 
 gitleaks detect --no-git --source . --config gitleaks.toml

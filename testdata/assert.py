@@ -127,11 +127,10 @@ RUNTIME_LEAKS = {
     "juninmd-buildkite-token": "bkua_" + fixture("buildkite", 40),
     # observabilidade / SaaS
     "juninmd-sonarcloud-token": "sqco_" + fixture("sonarcloud", 59),
-    "juninmd-newrelic-license-key": fixture("newrelic-license", 40) + "NRAL",
+    "juninmd-newrelic-license-key": fixture("newrelic-license", 36) + "NRAL",
     "juninmd-sentry-dsn": (
         "https://" + fixture("sentry-dsn", 32) + "@o123.ingest.sentry.io/456"
     ),
-    "juninmd-datadog-api-key": "ddog_" + fixture("datadog", 48),
     "juninmd-supabase-pat": "sbp_" + fixture("supabase", 40),
     "juninmd-firebase-cloud-messaging-key": (
         "AAAA" + fixture("firebase", 7) + ":" + fixture("firebase-secret", 140)
@@ -183,10 +182,6 @@ RUNTIME_LEAKS = {
     "juninmd-postman-collection-key": (
         "PMAT-" + fixture("postman-id", 24) + "-" + fixture("postman-secret", 34)
     ),
-    "juninmd-twilio-account-sid": "AC" + fixture("twilio-sid", 32),
-    "juninmd-datadog-application-key": (
-        "datadog_application_key = '" + fixture("datadog-app", 40) + "'"
-    ),
     "juninmd-azure-devops-pat": (
         "System.AccessToken = '" + fixture("azure-devops", 84) + "'"
     ),
@@ -237,7 +232,6 @@ EXPECTED = {
     "juninmd-sonarcloud-token",
     "juninmd-newrelic-license-key",
     "juninmd-sentry-dsn",
-    "juninmd-datadog-api-key",
     "juninmd-supabase-pat",
     "juninmd-firebase-cloud-messaging-key",
     "juninmd-nvidia-nim-api-key",
@@ -276,8 +270,6 @@ EXPECTED = {
     "juninmd-salesforce-refresh-token",
     "juninmd-bitly-secret-key",
     "juninmd-postman-collection-key",
-    "juninmd-twilio-account-sid",
-    "juninmd-datadog-application-key",
     "juninmd-azure-devops-pat",
 }
 
