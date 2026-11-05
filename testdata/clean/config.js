@@ -37,4 +37,11 @@ module.exports = {
 
   // header sem token real
   authTemplate: 'Bearer <YOUR_TOKEN>',
+
+  // placeholders dos formatos novos de API key
+  geminiPlaceholder: 'AQ.Ab<your-key-here>',
+  openRouterPlaceholder: 'sk-or-v1-<your-key-here>',
+  groqPlaceholder: 'gsk_<your-key-here>',
+  xaiPlaceholder: 'xai-<your-key-here>',
+  googleClientSecretPlaceholder: 'GOCSPX-<your-client-secret>',
 };

@@ -17,3 +17,6 @@ testdata/leaky/config.js:juninmd-hardcoded-password:11
 testdata/leaky/config.js:juninmd-hardcoded-password:21
 testdata/leaky/config.js:juninmd-internal-hostname:18
 testdata/leaky/config.js:juninmd-oracle-connect-string:18
+testdata/leaky/config.js:juninmd-google-gemini-auth-key:31
+testdata/leaky/config.js:juninmd-groq-api-key:34
+testdata/leaky/config.js:juninmd-google-oauth-client-secret:37

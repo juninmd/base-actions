@@ -2,8 +2,9 @@
 #
 # Estende o ruleset padrão do Gitleaks e acrescenta as regras que pegam o que o
 # padrão deixa passar: credencial de banco escrita direto no código, connect
-# string de Oracle, URI com usuário:senha, host interno corporativo e token
-# Authorization hardcoded.
+# string de Oracle, URI com usuário:senha, host interno corporativo, token
+# Authorization hardcoded e formatos de API key que o padrão ainda não cobre
+# (Gemini AQ.Ab, OpenRouter, Groq, xAI e Google OAuth client secret).
 #
 # Cada regra abaixo nasceu de um vazamento real encontrado nos repositórios —
 # não são padrões hipotéticos. Ver testdata/ para o corpus que prova cada uma.
@@ -68,7 +69,7 @@ tags = ["password", "juninmd"]
 # ─────────────────────────────────────────────────────────────────────
 # Connect string de Oracle
 #
-# Pega: connectString : "dbpkg.app.example.intranet:1578/PRODDB"
+# Pega: connectString : "dbpkg.app.example.intranet:1578/APP"
 # ─────────────────────────────────────────────────────────────────────
 [[rules]]
 id = "juninmd-oracle-connect-string"
@@ -119,7 +120,7 @@ tags = ["database", "credentials", "juninmd"]
 # Host interno corporativo
 #
 # Pega: dbpkg.app.example.intranet
-#       algum-servico.empresa.corp
+#       algum-servico.example.corp
 # Exige pelo menos dois rotulos antes do sufixo, senao `.env.local` e afins
 # viram falso positivo em massa. `.local` fica de fora de proposito: mDNS e
 # nome de arquivo usam demais.
@@ -200,6 +201,111 @@ tags = ["token", "juninmd"]
     '''(?i)(?:process\.env|os\.environ|secrets\.|\$\{|<token>|<your|YOUR_TOKEN|xxxx)''',
   ]
   stopwords = ["example", "exemplo", "placeholder", "token_here", "abcdef", "changeme"]
+
+# ─────────────────────────────────────────────────────────────────────
+# Google Gemini Auth key (formato novo)
+#
+# Pega: AQ.Ab8RN6FakeFixtureForGitleaks0123456789
+# O Google AI Studio passou a emitir chaves `AQ.Ab...` (Auth key) no lugar
+# das `AIza...` (Standard key). A regra `gcp-api-key` do ruleset padrao so
+# conhece AIza, entao sem esta regra a chave nova passa inteira.
+# Ref: https://ai.google.dev/gemini-api/docs/api-key
+# ─────────────────────────────────────────────────────────────────────
+[[rules]]
+id = "juninmd-google-gemini-auth-key"
+description = "Chave de autenticacao do Google Gemini no formato AQ.Ab..."
+regex = '''\b(AQ\.Ab[A-Za-z0-9_\-]{30,})(?:[\x60'"\s;]|\\[nr]|$)'''
+secretGroup = 1
+keywords = ["aq.ab"]
+tags = ["api-key", "google", "gemini", "juninmd"]
+
+  [[rules.allowlists]]
+  description = "Placeholders, valores de exemplo e interpolacao"
+  regexTarget = "secret"
+  regexes = [
+    '''(?i)^AQ\.Ab(?:[x*]+|example|placeholder|your|fake|dummy)''',
+  ]
+  stopwords = ["example", "exemplo", "placeholder", "your", "fake", "dummy"]
+
+# ─────────────────────────────────────────────────────────────────────
+# Chaves de API de provedores de IA ainda ausentes do ruleset padrao
+#
+# OpenRouter: sk-or-v1- + 64 hex
+# Groq:       gsk_ + 48 alfanumericos
+# xAI/Grok:   xai- + 80 alfanumericos
+# Ref: https://github.com/gitleaks/gitleaks/pull/2181
+#      https://github.com/gitleaks/gitleaks/issues/2309
+# ─────────────────────────────────────────────────────────────────────
+[[rules]]
+id = "juninmd-openrouter-api-key"
+description = "Chave de API do OpenRouter (sk-or-v1-...)"
+regex = '''\b(sk-or-v1-[a-f0-9]{64})(?:[\x60'"\s;]|\\[nr]|$)'''
+secretGroup = 1
+keywords = ["sk-or-v1-"]
+tags = ["api-key", "openrouter", "juninmd"]
+
+  [[rules.allowlists]]
+  description = "Placeholders e valores de exemplo"
+  regexTarget = "secret"
+  regexes = [
+    '''(?i)^sk-or-v1-(?:x{8,}|0{8,}|example|placeholder)''',
+  ]
+  stopwords = ["example", "exemplo", "placeholder", "your", "fake", "dummy"]
+
+[[rules]]
+id = "juninmd-groq-api-key"
+description = "Chave de API da Groq (gsk_...)"
+regex = '''\b(gsk_[A-Za-z0-9]{48})(?:[\x60'"\s;]|\\[nr]|$)'''
+secretGroup = 1
+keywords = ["gsk_"]
+tags = ["api-key", "groq", "juninmd"]
+
+  [[rules.allowlists]]
+  description = "Placeholders e valores de exemplo"
+  regexTarget = "secret"
+  regexes = [
+    '''(?i)^gsk_(?:x{8,}|0{8,}|example|placeholder)''',
+  ]
+  stopwords = ["example", "exemplo", "placeholder", "your", "fake", "dummy"]
+
+[[rules]]
+id = "juninmd-xai-api-key"
+description = "Chave de API da xAI/Grok (xai-...)"
+regex = '''\b(xai-[A-Za-z0-9]{80})(?:[\x60'"\s;]|\\[nr]|$)'''
+secretGroup = 1
+keywords = ["xai-"]
+tags = ["api-key", "xai", "juninmd"]
+
+  [[rules.allowlists]]
+  description = "Placeholders e valores de exemplo"
+  regexTarget = "secret"
+  regexes = [
+    '''(?i)^xai-(?:x{8,}|0{8,}|example|placeholder)''',
+  ]
+  stopwords = ["example", "exemplo", "placeholder", "your", "fake", "dummy"]
+
+# ─────────────────────────────────────────────────────────────────────
+# Google OAuth client secret
+#
+# Pega: GOCSPX-...
+# O ruleset padrao cobre o client ID (`*.apps.googleusercontent.com`) e o
+# access token (`ya29.`), mas nao o client secret emitido pelo Google Cloud.
+# ─────────────────────────────────────────────────────────────────────
+[[rules]]
+id = "juninmd-google-oauth-client-secret"
+description = "Client secret do Google OAuth (GOCSPX-...)"
+regex = '''\b(GOCSPX-[A-Za-z0-9_\-]{20,})(?:[\x60'"\s;]|\\[nr]|$)'''
+secretGroup = 1
+keywords = ["gocspx-"]
+tags = ["api-key", "google", "oauth", "juninmd"]
+
+  [[rules.allowlists]]
+  description = "Placeholders e valores de exemplo"
+  regexTarget = "secret"
+  regexes = [
+    '''(?i)^GOCSPX-(?:x{8,}|0{8,}|example|placeholder)''',
+  ]
+  stopwords = ["example", "exemplo", "placeholder", "your", "fake", "dummy"]
 
 # ─────────────────────────────────────────────────────────────────────
 # Allowlist global
