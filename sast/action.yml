@@ -150,6 +150,8 @@ runs:
       uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
       with:
         python-version: '3.13'
+        # pip resolve pelo python local, nao pelo pip do sistema; garante que
+        # o semgrep seja instalado no mesmo python rodando.
 
     - name: Instalar semgrep
       shell: bash
@@ -157,8 +159,9 @@ runs:
         SEMGREP_VERSION: ${{ inputs.semgrep-version }}
       run: |
         set -euo pipefail
-        pip install --quiet "semgrep==$SEMGREP_VERSION"
-        semgrep --version
+        python -m pip install --quiet --upgrade pip
+        python -m pip install --quiet "semgrep==$SEMGREP_VERSION"
+        python -m semgrep --version 2>/dev/null || semgrep --version
 
     - name: TruffleHog
       id: trufflehog
