@@ -24,6 +24,7 @@ Central repository for standardized GitHub Actions composite actions and reusabl
 - `reusable-dependabot-auto-merge.yml` - Auto-merge squash para Dependabot
 - `reusable-pages.yml` - Deploy padronizado para GitHub Pages
 - `reusable-codeql.yml` - SAST CodeQL avançado
+- `reusable-sast.yml` - TruffleHog (segredo verificado ao vivo) + Trivy (CVE/IaC) + Semgrep; consumido por `sast/action.yml`
 - `reusable-stale.yml` - Gestão automática de issues/PRs inativos
 - `reusable-pr-labeler.yml` - Triagem automática de PRs por escopo de pastas
 
@@ -37,6 +38,7 @@ quality-check/   # Quality check action
 security-scan/   # Security scan action
 setup-node-pnpm/ # Node/pnpm setup action
 setup-ollama/    # Ollama setup action
+sast/            # SAST composite action (TruffleHog + Trivy + Semgrep)
 ```
 
 ## Usage
