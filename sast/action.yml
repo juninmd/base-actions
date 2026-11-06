@@ -232,8 +232,10 @@ runs:
           --quiet \
           || { status=$?; echo "::error::Trivy falhou (exit $status)"; exit "$status"; }
 
-        total=$(jq '[.Results[]?.Vulnerabilities[]] | length' "$report")
-        mis=$(jq '[.Results[]?.Misconfigurations[]] | length' "$report")
+        # `[]?` no fim: resultados de secret/misconfig vem sem o array
+        # Vulnerabilities/Misconfigurations, e iterar null e erro de jq (exit 5).
+        total=$(jq '[.Results[]?.Vulnerabilities[]?] | length' "$report")
+        mis=$(jq '[.Results[]?.Misconfigurations[]?] | length' "$report")
         total=$(( total + mis ))
         echo "count=$total" >> "$GITHUB_OUTPUT"
 
