@@ -10,7 +10,8 @@ Central repository for standardizing GitHub Actions workflows across all **junin
 - **Commit Lint**: Conventional Commits validation for PRs and pushes.
 - **Node CI**: pnpm typecheck, build and lint.
 - **Release & Tagging**: Date-based tag generation plus GitHub release notes.
-- **Quality Check / Security Scan / Setup Node+pnpm / Setup Ollama**: composite actions avulsas (ver [Composite actions avulsas](#-composite-actions-avulsas)).
+- **Security**: Gitleaks + TruffleHog no historico git e em issues/PRs/comentarios; Trivy, Semgrep e zizmor no filesystem (ver [Camadas de seguranca](#️-camadas-de-seguranca)).
+- **Quality Check / Security Scan / Comments Scan / SAST / Setup Node+pnpm / Setup Ollama**: composite actions avulsas (ver [Composite actions avulsas](#-composite-actions-avulsas)).
 
 ## 📌 Versionamento
 
@@ -237,11 +238,67 @@ jobs:
     uses: juninmd/base-actions/.github/workflows/reusable-pr-labeler.yml@main
 ```
 
+### 13. Segredos em issues, PRs e comentarios
+Segredo colado em comentario nao esta no git: nenhum gate de codigo enxerga. Este workflow
+varre cada texto novo na hora (payload do evento, sem API) e o repositorio inteiro no
+agendamento, com Gitleaks + TruffleHog. Add this to `.github/workflows/comments-scan.yml`:
+
+```yaml
+name: Comments Scan
+on:
+  issue_comment: { types: [created, edited] }
+  issues: { types: [opened, edited] }
+  pull_request_review: { types: [submitted, edited] }
+  pull_request_review_comment: { types: [created, edited] }
+  schedule: [{ cron: '17 4 * * 1' }]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  comments:
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    uses: juninmd/base-actions/.github/workflows/reusable-comments-scan.yml@main
+```
+
+Achou segredo em comentario: **revogue a credencial e apague o comentario** — editar nao
+remove o valor do historico de edicoes do GitHub.
+Falso positivo confirmado (ou credencial ja revogada) entra no baseline pelo input
+`ignore`, com a chave que o proprio resumo do job mostra na coluna "Ignore"
+(ex. `ignore: issue-25:juninmd-hardcoded-password`).
+
+## 🛡️ Camadas de seguranca
+
+| Camada | Onde | Ferramentas | Reprova por padrao? |
+|---|---|---|---|
+| Segredo no historico git (PR: so o intervalo do PR) | `validate-pr`, `security-scan`, `reusable-security-scan.yml` | **Gitleaks** (formato, ruleset central) + **TruffleHog** (credencial verificada ao vivo) | sim |
+| Segredo fora do git | `comments-scan`, `reusable-comments-scan.yml` | Gitleaks + TruffleHog | sim |
+| Filesystem atual | `sast`, `reusable-sast.yml` | TruffleHog, **Trivy** (CVE + IaC + segredo), **Semgrep** | sim |
+| Workflows do GitHub Actions | `sast` (scanner `zizmor`) | **zizmor** | nao (`fail-zizmor: true` liga) |
+| Dependencias | `validate-pr` (`audit`) | npm/pnpm/yarn/bun audit, pip-audit, cargo-audit, govulncheck | nao (`audit-blocking: true` liga) |
+| SAST semantico | `reusable-codeql.yml` | CodeQL | conforme o repo |
+
+Gitleaks e TruffleHog rodam **lado a lado** e se complementam: o Gitleaks casa formato
+(pega segredo ja revogado e os padroes internos do `gitleaks.toml`), o TruffleHog testa a
+credencial na API do provedor e so reprova a que **ainda autentica** — por isso nao sofre
+com fixture nem exemplo de documentacao. `trufflehog-verify: false` troca para modo
+inventario; `trufflehog: false` desliga.
+
+Os binarios (gitleaks, trufflehog, trivy) sao instalados por `scripts/install-tool.sh`, que
+confere o **sha256 fixado no repo** — do tarball baixado e do binario restaurado do cache.
+Versao customizada (sem hash fixado) cai no `checksums.txt` do proprio release, com aviso.
+
 ## 🧩 Composite actions avulsas
 
 | Action | Para que serve |
 |---|---|
-| `security-scan` | Gitleaks (binario com checksum e cache) no historico completo ou num intervalo `base..head` |
+| `security-scan` | Gitleaks + TruffleHog (binarios com sha256 fixado e cache) no historico completo ou num intervalo `base..head` |
+| `comments-scan` | Gitleaks + TruffleHog em issues, PRs, comentarios, reviews e notas de release |
+| `sast` | TruffleHog + Trivy + Semgrep + zizmor no filesystem atual |
 | `quality-check` | Lint e testes com pnpm; script ausente e erro de configuracao, nao sucesso |
 | `setup-node-pnpm` | Node + pnpm (corepack quando ha `packageManager`) e install com cache |
 | `setup-ollama` | Ollama em versao fixa (checksum) + modelo em cache; so Linux |
@@ -259,7 +316,8 @@ Requisitos locais: `actionlint`, `shellcheck`, Python 3 com `pyyaml` (`pip insta
 para o contrato do ruleset, `gitleaks`. Os runtimes das actions (Node, Python, Docker) vem do
 runner do GitHub, nao da sua maquina.
 
-`make lint` roda os mesmos gates do CI (actionlint + `lint-actions.py`). Veja
+`make lint` roda os mesmos gates do CI (actionlint + `lint-actions.py` + shellcheck dos
+`scripts/` + zizmor + regressoes; para o zizmor, `pip install zizmor`). Veja
 [CONTRIBUTING.md](CONTRIBUTING.md) e [SECURITY.md](SECURITY.md).
 
 ## 🔐 Permissoes exigidas do repositorio chamador
@@ -271,6 +329,8 @@ Se o seu workflow declara `permissions:` no topo, o job que chama precisa conced
 |---|---|
 | `reusable-validate.yml` | `contents: read` |
 | `reusable-security-scan.yml` | `contents: read` |
+| `reusable-sast.yml` | `contents: read` |
+| `reusable-comments-scan.yml` | `contents: read`, **`issues: read`**, **`pull-requests: read`** |
 | `reusable-docker-build.yml` | `contents: read`, **`packages: write`** |
 | `reusable-deploy.yml` | `contents: read` |
 
@@ -280,6 +340,25 @@ O que **nao** funciona e declarar menos do que o workflow chamado pede — isso 
 
 ## ⚠️ Mudancas de comportamento
 
+- `security-scan` / `validate-pr`: o **TruffleHog** passou a rodar ao lado do Gitleaks.
+  Credencial verificada ao vivo no intervalo do PR (ou no historico, no
+  `reusable-security-scan`) reprova. Desligue com `trufflehog: 'false'`.
+- `security-scan`: intervalo que o git nao resolve (clone raso, force-push) nao passa mais
+  verde. Antes o Gitleaks recebia `bad object`, varria **0 commits** e reportava "no leaks
+  found"; agora cai na varredura do historico disponivel, com warning.
+- `sast`: os achados do scanner `secret` do Trivy passaram a **contar** (eram descartados em
+  silencio). Fixture com segredo falso de proposito: `trivy-skip-dirs`, `trivy-skip-files`
+  ou `.trivyignore`.
+- `sast`: todos os scanners rodam e um unico gate reprova no fim (antes o primeiro com
+  achado pulava os seguintes). Semgrep que nao instala **reprova** com `fail-semgrep: true`
+  (antes sumia num `::debug::` com job verde).
+- `sast`: novo scanner **zizmor** nos workflows, em modo relatorio (`fail-zizmor: 'false'`).
+- `reusable-dependabot-auto-merge.yml`: a guarda passou de `github.actor` (forjavel) para o
+  autor do PR (`pull_request.user.login`).
+- `setup-ollama`: `ollama-host` com espaco ou quebra de linha e rejeitado (o valor vai para
+  o `GITHUB_ENV`).
+- `validate-pr`: recusa rodar em `pull_request_target` (executaria codigo do PR com o token
+  e os secrets do repositorio base). Use `pull_request`.
 - `validate-pr`: teste Python vermelho agora **derruba o job** (antes era engolido por
   `2>/dev/null || echo "No tests found"`).
 - `reusable-validate.yml`: os inputs `node-version`/`python-version`/`pnpm-version` voltaram

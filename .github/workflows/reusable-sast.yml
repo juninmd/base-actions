@@ -38,8 +38,38 @@ on:
         type: string
         required: false
         default: 'CRITICAL,HIGH'
+      trivy-skip-dirs:
+        description: Diretorios ignorados pelo Trivy (comma-separated)
+        type: string
+        required: false
+        default: ''
+      trivy-skip-files:
+        description: Arquivos ignorados pelo Trivy (comma-separated)
+        type: string
+        required: false
+        default: ''
+      zizmor:
+        description: Audita os workflows do GitHub Actions com o zizmor
+        type: boolean
+        required: false
+        default: true
+      zizmor-version:
+        description: Versao fixada do zizmor
+        type: string
+        required: false
+        default: '1.32.0'
+      zizmor-min-severity:
+        description: Severidade minima do zizmor (informational, low, medium, high)
+        type: string
+        required: false
+        default: 'high'
+      fail-zizmor:
+        description: Falha o job no achado do zizmor (padrao false = relatorio)
+        type: boolean
+        required: false
+        default: false
       semgrep-configs:
-        description: Registros semgrep (comma-separated)
+        description: Regras semgrep (space-separated)
         type: string
         required: false
         default: 'p/default'
@@ -64,7 +94,7 @@ permissions:
 
 jobs:
   sast:
-    name: SAST (trufflehog + trivy + semgrep)
+    name: SAST (trufflehog + trivy + semgrep + zizmor)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -85,3 +115,9 @@ jobs:
           fail-trufflehog: ${{ inputs.fail-trufflehog }}
           fail-trivy: ${{ inputs.fail-trivy }}
           fail-semgrep: ${{ inputs.fail-semgrep }}
+          trivy-skip-dirs: ${{ inputs.trivy-skip-dirs }}
+          trivy-skip-files: ${{ inputs.trivy-skip-files }}
+          zizmor: ${{ inputs.zizmor }}
+          zizmor-version: ${{ inputs.zizmor-version }}
+          zizmor-min-severity: ${{ inputs.zizmor-min-severity }}
+          fail-zizmor: ${{ inputs.fail-zizmor }}

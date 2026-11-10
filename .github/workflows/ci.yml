@@ -16,6 +16,7 @@ concurrency:
 env:
   ACTIONLINT_VERSION: 1.7.7
   ACTIONLINT_SHA256: 023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757
+  ZIZMOR_VERSION: 1.32.0
 
 jobs:
   lint:
@@ -54,6 +55,26 @@ jobs:
           shellcheck --version
           pip install --quiet pyyaml
           python .github/scripts/lint-actions.py
+
+      # scripts/*.sh rodam dentro das actions (instalacao dos scanners): mesmo
+      # rigor do shell embutido nos action.yml, sem a lista de excecoes de la.
+      - name: shellcheck (scripts/)
+        run: shellcheck scripts/*.sh
+
+      # zizmor enxerga o que actionlint e o lint-actions.py nao olham: gatilho
+      # perigoso (pull_request_target/issue_comment), checagem de bot forjavel,
+      # credencial persistida, escrita em GITHUB_ENV, permissao excessiva.
+      # Excecoes ficam no codigo (`# zizmor: ignore[...]` com o motivo ao lado) e a
+      # politica de pin em .github/zizmor.yml. --offline: sem token, sem API.
+      - name: zizmor (seguranca dos workflows e actions)
+        run: |
+          pip install --quiet "zizmor==${ZIZMOR_VERSION}"
+          zizmor --offline --min-severity medium .
+
+      # Coletor do comments-scan contra uma API falsa: paginacao, indice de URLs,
+      # texto anterior de edicao e falha fechada em 403.
+      - name: Regression do coletor de comentarios (comments-scan)
+        run: python .github/scripts/test-comments-scan.py
 
       # Pina o gate de segredos do validate-pr: exceção de fixture e rejeição de .env/.pem/.key.
       - name: Regression do gate de segredos (validate-pr)

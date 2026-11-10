@@ -12,6 +12,8 @@ Este script fecha esse buraco:
   4. toda action de terceiro fixada por SHA de commit (tag e mutavel; este repo
      e consumido por 140+ repos, entao uma tag movida vira supply chain)
   5. versao do Gitleaks igual nos tres lugares que a declaram
+  6. versao de cada scanner igual em toda action/reusable, e com sha256 fixado
+     em scripts/install-tool.sh
 """
 from __future__ import annotations
 
@@ -200,6 +202,42 @@ def check_gitleaks_version() -> None:
         errors.append(f"versao do Gitleaks divergente: {found}")
 
 
+def check_scanner_versions() -> None:
+    """Cada scanner com a mesma versao em toda action/reusable, e com sha256 fixado.
+
+    install-tool.sh so confere contra hash fixado as versoes que ele conhece;
+    bumpar o default de uma action e esquecer o hash rebaixaria a instalacao para
+    o checksums.txt do proprio release, em silencio.
+    """
+    pinned = set()
+    for line in Path("scripts/install-tool.sh").read_text(encoding="utf-8").splitlines():
+        parts = line.strip().split("|")
+        if len(parts) == 5 and re.fullmatch(r"[0-9a-f]{64}", parts[3]) and re.fullmatch(r"[0-9a-f]{64}", parts[4]):
+            pinned.add((parts[0], parts[1], parts[2]))
+    files = [*sorted(Path(".").glob("*/action.yml")), *sorted(Path(".github/workflows").glob("reusable-*.yml"))]
+    for tool in ("gitleaks", "trufflehog", "trivy", "semgrep", "zizmor"):
+        found: dict[str, str] = {}
+        for path in files:
+            doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+            if path.name == "action.yml":
+                inputs = doc.get("inputs") or {}
+            else:
+                inputs = ((doc.get("on", doc.get(True)) or {}).get("workflow_call") or {}).get("inputs") or {}
+            spec = inputs.get(f"{tool}-version")
+            if isinstance(spec, dict) and "default" in spec:
+                found[path.as_posix()] = str(spec["default"])
+        if len(set(found.values())) > 1:
+            errors.append(f"versao do {tool} divergente: {found}")
+        if tool in ("gitleaks", "trufflehog", "trivy"):
+            for version in set(found.values()):
+                for arch in ("X64", "ARM64"):
+                    if (tool, version, arch) not in pinned:
+                        errors.append(
+                            f"scripts/install-tool.sh: {tool} {version} ({arch}) sem sha256 fixado "
+                            f"— adicione a linha em PINNED ao bumpar a versao"
+                        )
+
+
 def main() -> int:
     targets = sorted(
         os.path.join(d, "action.yml").replace(os.sep, "/")
@@ -217,6 +255,7 @@ def main() -> int:
             traceback.print_exc(file=sys.stderr)
     check_pins()
     check_gitleaks_version()
+    check_scanner_versions()
     for w in warnings:
         print(f"::warning::{w}")
     for e in errors:

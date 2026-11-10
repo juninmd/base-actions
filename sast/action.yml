@@ -1,9 +1,10 @@
 name: SAST
 description: >-
   Varredura de static analysis: segredos verificados com o TruffleHog (prova se a
-  credencial ainda autentica na API do provedor), dependencias + IaC com o Trivy
-  e SAST polyglot com o Semgrep. Complementa o `security-scan` (gitleaks), que
-  cobre historico de git; este cobre o filesystem atual.
+  credencial ainda autentica na API do provedor), dependencias + segredos + IaC
+  com o Trivy, SAST polyglot com o Semgrep e auditoria dos proprios workflows do
+  GitHub Actions com o zizmor. Complementa o `security-scan` (gitleaks +
+  trufflehog no historico git); este cobre o filesystem atual.
 
 inputs:
   trufflehog-version:
@@ -33,14 +34,43 @@ inputs:
     description: Severidades a reportar do Trivy
     required: false
     default: 'CRITICAL,HIGH'
+  trivy-skip-dirs:
+    description: >-
+      Diretorios que o Trivy ignora (comma-separated), ex. fixtures de teste com
+      segredo falso de proposito. `.trivyignore` do repo tambem e respeitado.
+    required: false
+    default: ''
   semgrep-version:
     description: Versao fixada do Semgrep (pip)
     required: false
     default: '1.120.0'
   semgrep-configs:
-    description: 'Regras semgrep a usar (space-separated)'
+    description: >-
+      Regras semgrep a usar (space-separated): pacote da registry (`p/default`),
+      `auto`, ou caminho de arquivo/diretorio de regras do proprio repo.
     required: false
     default: 'p/default'
+  trivy-skip-files:
+    description: >-
+      Arquivos que o Trivy ignora (comma-separated), ex. o codigo de um scanner
+      de segredos, que carrega token falso como fixture.
+    required: false
+    default: ''
+  zizmor:
+    description: >-
+      Audita .github/workflows e action.yml com o zizmor (injecao de template,
+      pull_request_target perigoso, permissao excessiva, action sem pin, cache
+      poisoning). Pulado sozinho quando o repo nao tem workflow.
+    required: false
+    default: 'true'
+  zizmor-version:
+    description: Versao fixada do zizmor (pip)
+    required: false
+    default: '1.32.0'
+  zizmor-min-severity:
+    description: Severidade minima reportada pelo zizmor (informational, low, medium, high)
+    required: false
+    default: 'high'
   fail-trufflehog:
     description: Falha o job quando o TruffleHog reportar segredo verificado
     required: false
@@ -50,136 +80,88 @@ inputs:
     required: false
     default: 'true'
   fail-semgrep:
-    description: Falha o job quando o Semgrep reportar acho
+    description: >-
+      Falha o job quando o Semgrep reportar achado -- e tambem quando o Semgrep
+      nao puder ser instalado (gate que nao roda nao e gate).
     required: false
     default: 'true'
+  fail-zizmor:
+    description: >-
+      Falha o job quando o zizmor reportar achado. Padrao false: relatorio no
+      primeiro ciclo, aperte para true depois do triage.
+    required: false
+    default: 'false'
 
 outputs:
   trufflehog-findings:
     description: Numero de segredos verificados
     value: ${{ steps.trufflehog.outputs.count }}
   trivy-findings:
-    description: Numbero de vulnerabilidades/misconfigs
+    description: Numero de vulnerabilidades, segredos e misconfigs
     value: ${{ steps.trivy.outputs.count }}
   semgrep-findings:
     description: Numero de achados de SAST
     value: ${{ steps.semgrep.outputs.count }}
+  zizmor-findings:
+    description: Numero de achados nos workflows (vazio quando pulado)
+    value: ${{ steps.zizmor.outputs.count }}
 
 runs:
   using: composite
   steps:
-    # TruffleHog e Trivy: cache por versao assim como o gitleaks no
-    # security-scan/action.yml. Hash e pega direto do release e verificado.
-
+    # Binarios cacheados por versao; a integridade (sha256 FIXADO do tarball e do
+    # binario restaurado do cache) e do scripts/install-tool.sh, o mesmo usado
+    # pelo security-scan.
     - name: Restaurar TruffleHog do cache
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
       with:
-        path: ${{ runner.temp }}/sast-bin/trufflehog
+        path: ${{ runner.temp }}/trufflehog-bin
         key: trufflehog-${{ runner.os }}-${{ runner.arch }}-${{ inputs.trufflehog-version }}
 
     - name: Restaurar Trivy do cache
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
       with:
-        path: ${{ runner.temp }}/sast-bin/trivy
+        path: ${{ runner.temp }}/trivy-bin
         key: trivy-${{ runner.os }}-${{ runner.arch }}-${{ inputs.trivy-version }}
 
     - name: Instalar TruffleHog
       shell: bash
       env:
-        TH_VERSION: ${{ inputs.trufflehog-version }}
-        ARCH: ${{ runner.arch }}
-      run: |
-        set -euo pipefail
-        dest="$RUNNER_TEMP/sast-bin/trufflehog"
-        case "$ARCH" in
-          X64)   tar_name=linux_amd64 ;;
-          ARM64) tar_name=linux_arm64 ;;
-          *) echo "::error::Arquitetura nao suportada pelo TruffleHog: $ARCH"; exit 1 ;;
-        esac
-        bin="$dest/trufflehog"
-        mkdir -p "$dest"
-        if [ -f "$bin" ]; then
-          echo "::notice::TruffleHog proveniente do cache"
-        else
-          work="$RUNNER_TEMP/th-dl"
-          mkdir -p "$work"
-          tarball="trufflehog_${TH_VERSION}_${tar_name}.tar.gz"
-          base="https://github.com/trufflesecurity/trufflehog/releases/download/v${TH_VERSION}"
-          curl -fsSL --retry 3 --retry-delay 2 -o "$work/$tarball" "$base/$tarball"
-          curl -fsSL --retry 3 --retry-delay 2 -o "$work/sums" "$base/trufflehog_${TH_VERSION}_checksums.txt"
-          (cd "$work" && grep "  $tarball" sums | sha256sum -c -)
-          tar -xzf "$work/$tarball" -C "$work"
-          mv "$work/trufflehog" "$bin"
-          rm -rf "$work"
-        fi
-        chmod +x "$bin"
-        "$bin" --version
+        VERSION: ${{ inputs.trufflehog-version }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: bash "$ACTION_PATH/../scripts/install-tool.sh" trufflehog "$VERSION" "$RUNNER_TEMP/trufflehog-bin"
 
     - name: Instalar Trivy
       shell: bash
       env:
-        TRIVY_VERSION: ${{ inputs.trivy-version }}
-        ARCH: ${{ runner.arch }}
-      run: |
-        set -euo pipefail
-        dest="$RUNNER_TEMP/sast-bin/trivy"
-        case "$ARCH" in
-          X64)   tar_name=Linux-64bit   ;;
-          ARM64) tar_name=Linux-ARM64   ;;
-          *) echo "::error::Arquitetura nao suportada pelo Trivy: $ARCH"; exit 1 ;;
-        esac
-        bin="$dest/trivy"
-        mkdir -p "$dest"
-        if [ -f "$bin" ]; then
-          echo "::notice::Trivy proveniente do cache"
-        else
-          work="$RUNNER_TEMP/tv-dl"
-          mkdir -p "$work"
-          tarball="trivy_${TRIVY_VERSION}_${tar_name}.tar.gz"
-          base="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
-          curl -fsSL --retry 3 --retry-delay 2 -o "$work/$tarball" "$base/$tarball"
-          curl -fsSL --retry 3 --retry-delay 2 -o "$work/sums" "$base/trivy_${TRIVY_VERSION}_checksums.txt"
-          (cd "$work" && grep "  $tarball" sums | sha256sum -c -)
-          tar -xzf "$work/$tarball" -C "$work"
-          mv "$work/trivy" "$bin"
-          rm -rf "$work"
-        fi
-        chmod +x "$bin"
-        "$bin" version
+        VERSION: ${{ inputs.trivy-version }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: bash "$ACTION_PATH/../scripts/install-tool.sh" trivy "$VERSION" "$RUNNER_TEMP/trivy-bin"
 
-    # O binario mora em subdiretorio do RUNNER_TEMP; cada um no proprio diretorio
-    # (cache independente), entao os DOIS precisam ir para o PATH.
-    - name: Adicionar binarios ao PATH
-      shell: bash
-      run: |
-        echo "$RUNNER_TEMP/sast-bin/trufflehog" >> "$GITHUB_PATH"
-        echo "$RUNNER_TEMP/sast-bin/trivy" >> "$GITHUB_PATH"
+    # Cada scanner registra `count` e NAO encerra o job por achado: quem reprova e
+    # o passo "Gate" no fim. Antes, o primeiro scanner com achado pulava os
+    # seguintes (o Trivy nunca rodava se o TruffleHog reprovasse), e o relatorio
+    # saia pela metade. Erro de EXECUCAO continua derrubando na hora.
 
     # O TruffleHog verifica cada credencial ao vivo contra a API do provedor:
-    # com --results=verified, segredo stale/revogado/fake e descartado.
-    # O `filesystem` source varre source files atuais, sem andar por git history
-    # (o historico e trabalho do reusable-security-scan / gitleaks, que faz
-    # varredura incremental de PR).
-    # --no-banner e --json para machine-readable report.
-
+    # segredo stale/revogado/fake e descartado. O `filesystem` source varre os
+    # arquivos atuais; o historico git e do security-scan.
     - name: TruffleHog
       id: trufflehog
       shell: bash
       env:
         EXTRA_ARGS: ${{ inputs.trufflehog-args }}
         VERIFY: ${{ inputs.trufflehog-verify }}
-        FAIL_ON: ${{ inputs.fail-trufflehog }}
       run: |
         set -uo pipefail
         report="$RUNNER_TEMP/th-report.json"
         extra_args=( )
         if [ -n "$EXTRA_ARGS" ]; then read -ra extra_args <<< "$EXTRA_ARGS"; fi
-        # v3.99+: nao existe mais --only-verified; o equivalente e
-        # --results=verified (so credencial confirmada pela API do provedor).
-        # Com verify=false, usa --no-verification (relatorio de inventario,
-        # inclui credencial stale/fake).
+        # v3.99+: nao existe mais --only-verified. "unknown" = a verificacao
+        # falhou (rede/API): aparece no resumo como aviso, nao reprova.
+        # Com verify=false, --no-verification (inventario: inclui stale/fake).
         if [ "$VERIFY" = "true" ]; then
-          extra_args+=(--results=verified)
+          extra_args+=("--results=verified,unknown")
         else
           extra_args+=(--no-verification)
         fi
@@ -187,94 +169,98 @@ runs:
         trufflehog filesystem . --json --no-update \
           "${extra_args[@]}" \
           > "$report" \
-          || { status=$?; echo "::error::TruffleHog falhou (exit $status)"; exit "$status"; }
+          || { status=$?; rm -f "$report"; echo "::error::TruffleHog falhou (exit $status)"; exit "$status"; }
 
         # --json emite JSONL (um objeto por achado); sem achado, o arquivo sai
-        # VAZIO (os logs vao para stderr). jq -s 'length' cobre os dois casos:
-        # vazio => 0, JSONL => contagem.
-        total=$(jq -s 'length' "$report")
+        # VAZIO (os logs vao para stderr). jq -s cobre os dois casos.
+        if [ "$VERIFY" = "true" ]; then
+          total=$(jq -s '[.[] | select(.Verified == true)] | length' "$report")
+          unknown=$(jq -s '[.[] | select(.Verified != true)] | length' "$report")
+        else
+          total=$(jq -s 'length' "$report")
+          unknown=0
+        fi
         echo "count=$total" >> "$GITHUB_OUTPUT"
 
-        if [ "$total" -eq 0 ]; then
+        if [ "$total" -eq 0 ] && [ "$unknown" -eq 0 ]; then
           echo "### TruffleHog: nenhum segredo verificado ativo" >> "$GITHUB_STEP_SUMMARY"
         else
+          # Onde esta, nunca o valor.
           {
-            echo "### TruffleHog: $total segredo(s) verificados"
+            echo "### TruffleHog: $total segredo(s), $unknown com verificacao inconclusiva"
             echo ""
-            echo "| Detector | Arquivo | Linha |"
-            echo "| --- | --- | --- |"
-            jq -r '(.DetectorName // "?") + " | "
-              + (.SourceMetadata.Data.Filesystem.file // "-") + " | "
-              + ((.SourceMetadata.Data.Filesystem.line // 0)|tostring)' \
-              "$report"
+            echo "| Detector | Status | Arquivo | Linha |"
+            echo "| --- | --- | --- | --- |"
+            jq -r '"| \(.DetectorName // "?") | \(if .Verified == true then "ATIVO" elif (.VerificationError // "") != "" then "inconclusivo" else "nao verificado" end) | \(.SourceMetadata.Data.Filesystem.file // "-") | \(.SourceMetadata.Data.Filesystem.line // 0) |"' "$report"
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "::error::TruffleHog: $total segredo(s) ativos. Detalhes no resumo."
-          if [ "$FAIL_ON" = "true" ]; then exit 1; fi
         fi
-        exit 0
+        rm -f "$report"
+        if [ "$unknown" -gt 0 ]; then
+          echo "::warning::TruffleHog: $unknown credencial(is) nao puderam ser verificadas (rede/API)."
+        fi
+        if [ "$total" -gt 0 ]; then
+          echo "::error::TruffleHog: $total segredo(s). Detalhes no resumo."
+        fi
 
-    # Trivy cobre: vulnerability CVE em dependencias (npm/pnpm/yarn/bun, pip,
-    # go.sum, Cargo.lock), secret, e misconfig de IaC (Dockerfile/Terraform/K8s).
+    # Trivy cobre: CVE em dependencias (npm/pnpm/yarn/bun, pip, go.sum,
+    # Cargo.lock), segredo em arquivo e misconfig de IaC (Dockerfile/Terraform/K8s).
     - name: Trivy
       id: trivy
       shell: bash
       env:
         SCANNERS: ${{ inputs.trivy-scanners }}
         SEVERITY: ${{ inputs.trivy-severity }}
-        FAIL_ON: ${{ inputs.fail-trivy }}
+        SKIP_DIRS: ${{ inputs.trivy-skip-dirs }}
+        SKIP_FILES: ${{ inputs.trivy-skip-files }}
       run: |
         set -uo pipefail
         report="$RUNNER_TEMP/trivy-report.json"
+        skip_args=()
+        if [ -n "$SKIP_DIRS" ]; then skip_args+=(--skip-dirs "$SKIP_DIRS"); fi
+        if [ -n "$SKIP_FILES" ]; then skip_args+=(--skip-files "$SKIP_FILES"); fi
         trivy fs . \
           --scanners "$SCANNERS" \
           --severity "$SEVERITY" \
           --format json --output "$report" \
-          --quiet \
+          --quiet "${skip_args[@]}" \
           || { status=$?; echo "::error::Trivy falhou (exit $status)"; exit "$status"; }
 
-        # `[]?` no fim: resultados de secret/misconfig vem sem o array
-        # Vulnerabilities/Misconfigurations, e iterar null e erro de jq (exit 5).
-        total=$(jq '[.Results[]?.Vulnerabilities[]?] | length' "$report")
-        mis=$(jq '[.Results[]?.Misconfigurations[]?] | length' "$report")
-        total=$(( total + mis ))
+        # `[]?`: cada Result so traz o array do proprio tipo, e iterar null e erro
+        # de jq (exit 5). Secrets entra na conta: o scanner `secret` vem ligado
+        # por padrao e os achados dele eram descartados sem aparecer em lugar
+        # nenhum.
+        total=$(jq '[.Results[]? | (.Vulnerabilities[]?, .Misconfigurations[]?, .Secrets[]?)] | length' "$report")
         echo "count=$total" >> "$GITHUB_OUTPUT"
 
         if [ "$total" -eq 0 ]; then
-          echo "### Trivy: nenhuma C V E / IaC achado (severidade: $SEVERITY)" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Trivy: nenhum achado (severidade: $SEVERITY)" >> "$GITHUB_STEP_SUMMARY"
         else
+          # Segredo: so regra e local. O campo Match do Trivy fica fora do resumo.
           {
-            echo "### Trivy: $total finding(s) (severidade: $SEVERITY)"
+            echo "### Trivy: $total achado(s) (severidade: $SEVERITY)"
             echo ""
-            echo "| Tipo | ID | Arquivo | Severidade |"
+            echo "| Tipo | ID | Alvo | Severidade |"
             echo "| --- | --- | --- | --- |"
-            jq -r '.Results[] |
-              select(has("Vulnerabilities") or has("Misconfigurations")) |
-              (.Vulnerabilities // [])[]? |
-              ["v", .VulnerabilityID, .PkgName, .Severity] |
-              "  | \(.[0]) | \(.[1]) | \(.[2]) | \(.[3]) |"' \
-              "$report"
-            jq -r '.Results[] |
-              select(has("Misconfigurations")) |
-              .Misconfigurations[]? |
-              ["y", .ID, .Target, .Severity] |
-              "  | \(.[0]) | \(.[1]) | \(.[2]) | \(.[3]) |"' \
+            jq -r '.Results[]? | .Target as $t
+              | ((.Vulnerabilities // [])[] | "| vuln | \(.VulnerabilityID) | \(.PkgName)@\(.InstalledVersion) (\($t)) | \(.Severity) |"),
+                ((.Misconfigurations // [])[] | "| misconfig | \(.ID) | \($t) | \(.Severity) |"),
+                ((.Secrets // [])[] | "| secret | \(.RuleID) | \($t):\(.StartLine) | \(.Severity) |")' \
               "$report"
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "::error::Trivy: $total achados. Detalhes no resumo."
-          if [ "$FAIL_ON" = "true" ]; then exit 1; fi
+          echo "::error::Trivy: $total achado(s). Detalhes no resumo."
         fi
-        exit 0
+        rm -f "$report"
 
-    # Semgrep Roda por AST com registry rules. Pode quebrar em versoes futuros
-    # de Python (semgrep depende de protobuf que quebra em Py 3.14).
-    # A install pode falhar mesmo com Python 3.13 por conflito de pip com o
-    # 3.14 do sistema. continue-on-error para nao derrubar a action inteira
-    # (ja que TruffleHog e Trivy emitem output antes dele).
+    # Semgrep e zizmor vem do PyPI com versao fixada, num Python proprio (o
+    # semgrep nao instala no Python do sistema do runner).
     - name: Configura Python 3.13
       uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
       with:
         python-version: '3.13'
 
+    # continue-on-error para o relatorio dos outros scanners nao se perder por
+    # um pip instavel -- mas a falha NAO some: o passo Semgrep abaixo reprova
+    # quando fail-semgrep=true e o binario nao existe.
     - name: Instalar Semgrep
       id: semgrep-install
       shell: bash
@@ -291,7 +277,6 @@ runs:
 
     - name: Semgrep
       id: semgrep
-      if: success() || always()
       shell: bash
       env:
         CONFIGS: ${{ inputs.semgrep-configs }}
@@ -299,19 +284,29 @@ runs:
       run: |
         set -uo pipefail
         if ! command -v semgrep > /dev/null 2>&1; then
-          echo "::debug::Semgrep indisponivel no runner (prob pip contra Python 3.14/system)"
-          echo "count=0" >> "$GITHUB_OUTPUT"
+          # Antes isto era um `::debug::` + exit 0: se o pip falhasse, o SAST
+          # sumia e o job ficava verde. Agora a ausencia e visivel, e reprova
+          # quando o Semgrep e gate.
+          echo "### Semgrep: NAO RODOU (instalacao falhou)" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$FAIL_ON" = "true" ]; then
+            echo "::error::Semgrep nao pode ser instalado e fail-semgrep=true: o SAST nao rodou."
+            exit 1
+          fi
+          echo "::warning::Semgrep nao pode ser instalado — SAST pulado (fail-semgrep=false)."
           exit 0
         fi
         report="$RUNNER_TEMP/semgrep-report.json"
-        # configs pode vir como space-separated contendo espaco; vamos iterar cada config
         IFS=' ' read -ra configs <<< "$CONFIGS"
         cfg_flags=()
         for c in "${configs[@]}"; do
-          case "$c" in
-            p/*) cfg_flags+=(--config "$c") ;;
-            *)   cfg_flags+=(--config "p/$c") ;;
-          esac
+          [ -n "$c" ] || continue
+          # nome solto (ex. "owasp-top-ten") vira pacote da registry; `auto`,
+          # `p/...`, `r/...` e caminho local passam como vieram
+          if [ "$c" = "auto" ] || [ -e "$c" ] || [[ "$c" == */* ]]; then
+            cfg_flags+=(--config "$c")
+          else
+            cfg_flags+=(--config "p/$c")
+          fi
         done
         semgrep scan \
           "${cfg_flags[@]}" \
@@ -320,21 +315,90 @@ runs:
           . \
           || { status=$?; echo "::error::Semgrep falhou (exit $status)"; exit "$status"; }
         total=$(jq -r '.results | length' "$report")
+        echo "count=$total" >> "$GITHUB_OUTPUT"
         if [ "$total" -eq 0 ]; then
-          echo "count=0" >> "$GITHUB_OUTPUT"
           echo "### Semgrep: nenhum achado" >> "$GITHUB_STEP_SUMMARY"
         else
-          echo "count=$total" >> "$GITHUB_OUTPUT"
           {
             echo "### Semgrep: $total achado(s)"
             echo ""
             echo "| Rule | Arquivo | Linha |"
             echo "| --- | --- | --- |"
-            jq -r '.results[] |
-              (.check_id + " | " + .path + " | " + (.start.line|tostring))' \
-              "$report"
+            jq -r '.results[] | "| \(.check_id) | \(.path) | \(.start.line) |"' "$report"
           } >> "$GITHUB_STEP_SUMMARY"
           echo "::error::Semgrep: $total achado(s). Detalhes no resumo."
-          if [ "$FAIL_ON" = "true" ]; then exit 1; fi
         fi
-        exit 0
+
+    # zizmor: analise estatica dos workflows do proprio repo. Roda --offline (sem
+    # token e sem chamada a API). Config do repo em .github/zizmor.yml e respeitada.
+    - name: zizmor
+      id: zizmor
+      if: inputs.zizmor == 'true' && hashFiles('.github/workflows/*.yml', '.github/workflows/*.yaml', '**/action.yml', '**/action.yaml') != ''
+      shell: bash
+      env:
+        ZIZMOR_VERSION: ${{ inputs.zizmor-version }}
+        MIN_SEVERITY: ${{ inputs.zizmor-min-severity }}
+        FAIL_ON: ${{ inputs.fail-zizmor }}
+      run: |
+        set -uo pipefail
+        if ! python -m pip install --quiet "zizmor==$ZIZMOR_VERSION"; then
+          echo "### zizmor: NAO RODOU (instalacao falhou)" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$FAIL_ON" = "true" ]; then
+            echo "::error::zizmor nao pode ser instalado e fail-zizmor=true."
+            exit 1
+          fi
+          echo "::warning::zizmor nao pode ser instalado — auditoria de workflows pulada."
+          exit 0
+        fi
+        report="$RUNNER_TEMP/zizmor-report.json"
+        # --no-exit-codes: o exit so indica erro de execucao; achado vem do JSON.
+        zizmor --offline --no-exit-codes --format json \
+          --min-severity "$MIN_SEVERITY" . > "$report" \
+          || { status=$?; echo "::error::zizmor falhou (exit $status)"; exit "$status"; }
+        total=$(jq 'length' "$report")
+        echo "count=$total" >> "$GITHUB_OUTPUT"
+        if [ "$total" -eq 0 ]; then
+          echo "### zizmor: nenhum achado nos workflows (>= $MIN_SEVERITY)" >> "$GITHUB_STEP_SUMMARY"
+        else
+          {
+            echo "### zizmor: $total achado(s) nos workflows (>= $MIN_SEVERITY)"
+            echo ""
+            echo "| Auditoria | Severidade | Arquivo | Linha |"
+            echo "| --- | --- | --- | --- |"
+            jq -r '.[] | ((.locations | map(select(.symbolic.kind == "Primary")) | .[0]) // .locations[0]) as $l
+              | "| \(.ident) | \(.determinations.severity) | \($l.symbolic.key.Local.given_path // $l.symbolic.key.Local.verbatim_path // "-") | \(($l.concrete.location.start_point.row // 0) + 1) |"' "$report"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$FAIL_ON" = "true" ]; then
+            echo "::error::zizmor: $total achado(s) nos workflows. Detalhes no resumo."
+          else
+            echo "::warning::zizmor: $total achado(s) nos workflows (fail-zizmor=false). Detalhes no resumo."
+          fi
+        fi
+
+    - name: Gate SAST
+      shell: bash
+      env:
+        TH: ${{ steps.trufflehog.outputs.count }}
+        TV: ${{ steps.trivy.outputs.count }}
+        SG: ${{ steps.semgrep.outputs.count }}
+        ZZ: ${{ steps.zizmor.outputs.count }}
+        FAIL_TH: ${{ inputs.fail-trufflehog }}
+        FAIL_TV: ${{ inputs.fail-trivy }}
+        FAIL_SG: ${{ inputs.fail-semgrep }}
+        FAIL_ZZ: ${{ inputs.fail-zizmor }}
+      run: |
+        set -euo pipefail
+        blocked=""
+        check() { # nome, contagem, flag
+          local n="${2:-0}"
+          echo "$1=$n (fail=$3)"
+          if [ "$3" = "true" ] && [ "$n" -gt 0 ]; then blocked="$blocked $1($n)"; fi
+        }
+        check trufflehog "$TH" "$FAIL_TH"
+        check trivy "$TV" "$FAIL_TV"
+        check semgrep "$SG" "$FAIL_SG"
+        check zizmor "$ZZ" "$FAIL_ZZ"
+        if [ -n "$blocked" ]; then
+          echo "::error::SAST reprovou:$blocked. Detalhes no resumo do job."
+          exit 1
+        fi

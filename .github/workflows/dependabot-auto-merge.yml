@@ -4,7 +4,8 @@ name: Dependabot Auto-Merge
 # pull_request_target: o token em pull_request chega read-only para PRs de
 # dependabot[bot]; o reusable nao faz checkout de codigo, so metadados.
 on:
-  pull_request_target:
+  # Sem checkout e sem executar nada do PR: so API (metadados + auto-merge).
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [opened, reopened, synchronize]
 
 permissions:

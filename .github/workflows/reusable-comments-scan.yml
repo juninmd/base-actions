@@ -1,0 +1,80 @@
+name: Reusable Comments Scan
+
+# Varre segredos em issues, PRs, comentarios, reviews e notas de release com
+# Gitleaks + TruffleHog. Segredo colado em comentario nao esta no git: nenhum
+# gate de codigo (security-scan, sast) enxerga.
+#
+# Caller tipico:
+#
+#   on:
+#     issue_comment: { types: [created, edited] }
+#     issues: { types: [opened, edited] }
+#     pull_request_review: { types: [submitted, edited] }
+#     pull_request_review_comment: { types: [created, edited] }
+#     schedule: [{ cron: '17 4 * * 1' }]   # varredura completa semanal
+#     workflow_dispatch:
+#   permissions:
+#     contents: read
+#     issues: read
+#     pull-requests: read
+#   jobs:
+#     comments:
+#       uses: juninmd/base-actions/.github/workflows/reusable-comments-scan.yml@main
+on:
+  workflow_call:
+    inputs:
+      mode:
+        description: >-
+          auto = payload do evento quando ele carrega texto, senao o repositorio
+          inteiro. event = so o payload. full = sempre o repositorio inteiro.
+        type: string
+        required: false
+        default: 'auto'
+      since:
+        description: "Modo full: so itens atualizados desde entao ('30d' ou data ISO). Vazio = tudo."
+        type: string
+        required: false
+        default: ''
+      trufflehog-verify:
+        description: Verifica segredos ao vivo (so credencial ativa conta para o TruffleHog)
+        type: boolean
+        required: false
+        default: true
+      fail-on-findings:
+        description: Falha o job quando encontrar segredo
+        type: boolean
+        required: false
+        default: true
+      ignore:
+        description: >-
+          Baseline de achados ja triados (`<tipo>-<id>:<regra>`, separados por espaco
+          ou linha), como aparece na coluna "Ignore" do resumo.
+        type: string
+        required: false
+        default: ''
+
+# Sem `concurrency` e sem `secrets:` de proposito (mesmos motivos do
+# reusable-validate / reusable-security-scan).
+
+jobs:
+  scan:
+    # So leitura. O caller precisa conceder as tres: um workflow chamado nao pode
+    # pedir mais do que o teto do caller (pedir a mais = startup_failure), e em
+    # repositorio privado o token nao le issue/PR sem `issues`/`pull-requests`.
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # Sem checkout: a action nao le o codigo do repo, so a API e o payload. O
+      # evento issue_comment roda com o workflow do branch default; nada do
+      # comentario (conteudo nao confiavel) e executado ou interpolado.
+      - uses: juninmd/base-actions/comments-scan@main
+        with:
+          mode: ${{ inputs.mode }}
+          since: ${{ inputs.since }}
+          trufflehog-verify: ${{ inputs.trufflehog-verify }}
+          fail-on-findings: ${{ inputs.fail-on-findings }}
+          ignore: ${{ inputs.ignore }}

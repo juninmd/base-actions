@@ -65,7 +65,8 @@ runs:
         WAIT_TIMEOUT: ${{ inputs.wait-timeout }}
         VERSION: ${{ inputs.version }}
         ARCH: ${{ runner.arch }}
-      run: |
+      # GITHUB_ENV recebe um caminho fixo e o ollama-host ja validado (ver abaixo)
+      run: | # zizmor: ignore[github-env]
         set -euo pipefail
 
         case "$ARCH" in
@@ -93,6 +94,13 @@ runs:
         # abaixo e o unico dono da porta e do diretorio de modelos
         export OLLAMA_MODELS="$HOME/.ollama/models"
         mkdir -p "$OLLAMA_MODELS"
+        # O valor vai para o GITHUB_ENV: uma quebra de linha no input definiria
+        # variaveis arbitrarias (BASH_ENV, NODE_OPTIONS...) para os passos
+        # seguintes do job. So host/URL simples passa.
+        if ! printf '%s' "$OLLAMA_HOST" | grep -Eq '^[][A-Za-z0-9.:/_-]+$' || [ "$(printf '%s' "$OLLAMA_HOST" | wc -l)" -ne 0 ]; then
+          echo "::error::input 'ollama-host' invalido (so host ou URL simples, sem espaco nem quebra de linha)"
+          exit 1
+        fi
         echo "OLLAMA_MODELS=$OLLAMA_MODELS" >> "$GITHUB_ENV"
         echo "OLLAMA_HOST=$OLLAMA_HOST" >> "$GITHUB_ENV"
 

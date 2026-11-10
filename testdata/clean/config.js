@@ -24,6 +24,9 @@ module.exports = {
   // DNS interno de Kubernetes, nao e vazamento
   broker: 'blackbox-exporter.monitoring.svc.cluster.local:9115',
 
+  // forward do AMX Mod X: prefixo fw_ igual ao da Fireworks, mas e nome de funcao
+  amxForward: 'fw_PlayerPreThinkPostHookHandler',
+
   // endpoints de metadados de cloud: hostnames publicos e fixos
   metadata: 'http://metadata.google.internal/computeMetadata/v1/',
   linkLocal: 'http://169.254.169.254/latest/meta-data/',

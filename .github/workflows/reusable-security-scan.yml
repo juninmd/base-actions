@@ -13,6 +13,23 @@ on:
         type: boolean
         required: false
         default: true
+      trufflehog:
+        description: Roda o TruffleHog (verificacao ao vivo) ao lado do Gitleaks
+        type: boolean
+        required: false
+        default: true
+      trufflehog-version:
+        description: Versao fixada do TruffleHog
+        type: string
+        required: false
+        default: '3.99.8'
+      trufflehog-verify:
+        description: >-
+          true = so credencial confirmada ao vivo reprova. false = inventario
+          (todo formato reconhecido conta).
+        type: boolean
+        required: false
+        default: true
 # Nao declare `secrets:` aqui. GITHUB_TOKEN e nome reservado e declara-lo em
 # workflow_call invalida o arquivo inteiro, derrubando com startup_failure todo
 # repositorio que chamar este workflow. A action usa github.token, que ja chega
@@ -33,3 +50,6 @@ jobs:
         with:
           gitleaks-version: ${{ inputs.gitleaks-version }}
           fail-on-findings: ${{ inputs.fail-on-findings }}
+          trufflehog: ${{ inputs.trufflehog }}
+          trufflehog-version: ${{ inputs.trufflehog-version }}
+          trufflehog-verify: ${{ inputs.trufflehog-verify }}

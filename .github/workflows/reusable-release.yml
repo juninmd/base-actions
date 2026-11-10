@@ -32,7 +32,8 @@ jobs:
     timeout-minutes: 10
     if: github.ref == format('refs/heads/{0}', inputs.branch)
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # a credencial fica no clone de proposito: o passo de tag da push com ela.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7 # zizmor: ignore[artipacked]
         with:
           fetch-depth: 0
           token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}

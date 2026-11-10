@@ -1,0 +1,278 @@
+name: Comments Scan
+description: >-
+  Varredura de segredos no texto que vive FORA do git: issues, pull requests,
+  comentarios, reviews e notas de release. Usa Gitleaks (ruleset central) e
+  TruffleHog (verificacao ao vivo), como o security-scan faz com o historico.
+
+inputs:
+  github-token:
+    description: >-
+      Token para ler issues/PRs/comentarios pela API. Padrao: github.token (o job
+      precisa de contents, issues e pull-requests: read). So e usado no modo full.
+    required: false
+    default: ${{ github.token }}
+  repository:
+    description: Repositorio a varrer (owner/nome). Padrao o proprio.
+    required: false
+    default: ${{ github.repository }}
+  mode:
+    description: >-
+      auto = le so o payload do evento quando ele carrega texto (issue_comment,
+      issues, pull_request_review...), senao varre o repositorio inteiro pela API.
+      event = so o payload. full = sempre o repositorio inteiro.
+    required: false
+    default: 'auto'
+  since:
+    description: >-
+      Modo full: limita a itens atualizados desde entao. '30d' (dias) ou data ISO
+      (2026-01-31). Vazio = tudo.
+    required: false
+    default: ''
+  include-reviews:
+    description: 'Modo full: tambem baixa o corpo dos reviews (uma chamada de API por PR)'
+    required: false
+    default: 'true'
+  event-path:
+    description: Caminho do payload do evento. Padrao o do proprio run; existe para teste.
+    required: false
+    default: ''
+  gitleaks-version:
+    description: Versao fixada do Gitleaks
+    required: false
+    default: '8.30.1'
+  trufflehog-version:
+    description: Versao fixada do TruffleHog
+    required: false
+    default: '3.99.8'
+  trufflehog-verify:
+    description: >-
+      true = so credencial confirmada ao vivo conta como achado do TruffleHog.
+      false = inventario (--no-verification).
+    required: false
+    default: 'true'
+  fail-on-findings:
+    description: Falha o job quando encontrar segredo
+    required: false
+    default: 'true'
+  ignore:
+    description: >-
+      Baseline de achados ja triados, um por linha ou separados por espaco, no
+      formato `<tipo>-<id>:<regra>` como aparece na coluna "Ignore" do resumo (ex.
+      `issue-25:juninmd-hardcoded-password`). Use para falso positivo confirmado ou
+      credencial JA revogada; credencial viva se resolve revogando, nao ignorando.
+    required: false
+    default: ''
+
+outputs:
+  scanned:
+    description: Quantidade de textos varridos
+    value: ${{ steps.collect.outputs.count }}
+  findings:
+    description: Ocorrencias do Gitleaks
+    value: ${{ steps.gitleaks.outputs.total }}
+  trufflehog-findings:
+    description: Segredos que reprovam pelo TruffleHog
+    value: ${{ steps.trufflehog.outputs.total }}
+
+runs:
+  using: composite
+  steps:
+    - name: Restaurar Gitleaks do cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: ${{ runner.temp }}/gitleaks-bin
+        key: gitleaks-${{ runner.os }}-${{ runner.arch }}-${{ inputs.gitleaks-version }}
+
+    - name: Restaurar TruffleHog do cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: ${{ runner.temp }}/trufflehog-bin
+        key: trufflehog-${{ runner.os }}-${{ runner.arch }}-${{ inputs.trufflehog-version }}
+
+    - name: Instalar Gitleaks
+      shell: bash
+      env:
+        VERSION: ${{ inputs.gitleaks-version }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: bash "$ACTION_PATH/../scripts/install-tool.sh" gitleaks "$VERSION" "$RUNNER_TEMP/gitleaks-bin"
+
+    - name: Instalar TruffleHog
+      shell: bash
+      env:
+        VERSION: ${{ inputs.trufflehog-version }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: bash "$ACTION_PATH/../scripts/install-tool.sh" trufflehog "$VERSION" "$RUNNER_TEMP/trufflehog-bin"
+
+    # O corpo do comentario e conteudo NAO confiavel (qualquer pessoa comenta em
+    # repo publico): ele so existe como arquivo no RUNNER_TEMP, nunca passa por
+    # shell nem por expressao ${{ }}. O dump fica fora do workspace.
+    - name: Coletar textos
+      id: collect
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        SCAN_REPOSITORY: ${{ inputs.repository }}
+        SCAN_MODE: ${{ inputs.mode }}
+        SCAN_SINCE: ${{ inputs.since }}
+        SCAN_INCLUDE_REVIEWS: ${{ inputs.include-reviews }}
+        SCAN_EVENT_PATH: ${{ inputs.event-path }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        export SCAN_OUT="$RUNNER_TEMP/gh-text-dump"
+        rm -rf "$SCAN_OUT"
+        python3 "$ACTION_PATH/collect.py"
+
+    - name: Varrer com Gitleaks
+      id: gitleaks
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        IGNORE: ${{ inputs.ignore }}
+      run: |
+        set -uo pipefail
+        dump="$RUNNER_TEMP/gh-text-dump"
+        report="$RUNNER_TEMP/comments-gitleaks.json"
+        # baseline como array JSON, reutilizado pelo passo do TruffleHog
+        printf '%s' "$IGNORE" | jq -R -s '[splits("[[:space:]]+") | select(length > 0)]' > "$RUNNER_TEMP/comments-ignore.json"
+        # Sempre o ruleset central: aqui nao ha checkout, e a config do repo
+        # varrido tem allowlist de PATH que nao faz sentido para comentario.
+        gitleaks detect --no-git \
+          --source "$dump" \
+          --config "$ACTION_PATH/../gitleaks.toml" \
+          --report-format json \
+          --report-path "$report" \
+          --redact \
+          --no-banner \
+          --exit-code 0
+        status=$?
+        if [ $status -ne 0 ]; then
+          echo "::error::Gitleaks falhou ao executar (codigo $status)"
+          exit $status
+        fi
+        [ -s "$report" ] || echo '[]' > "$report"
+        # index.json e o proprio indice, nao um texto varrido. A chave de baseline
+        # e `<arquivo sem .txt>:<regra>`.
+        jq --slurpfile ign "$RUNNER_TEMP/comments-ignore.json" '
+          [.[] | (.File | split("/") | last) as $f | select($f != "index.json")
+            | . + {Key: (($f | sub("\\.txt$"; "")) + ":" + .RuleID)}]
+          | {keep: map(select(.Key as $k | $ign[0] | index($k) | not)),
+             ignored: map(select(.Key as $k | $ign[0] | index($k)))}' "$report" > "$report.split"
+        ignored=$(jq '.ignored | length' "$report.split")
+        jq '.keep' "$report.split" > "$report"
+        rm -f "$report.split"
+        if [ "$ignored" -gt 0 ]; then
+          echo "::notice::Gitleaks: $ignored ocorrencia(s) no baseline (input ignore) nao contam"
+        fi
+        total=$(jq 'length' "$report")
+        echo "total=$total" >> "$GITHUB_OUTPUT"
+
+        if [ "$total" -eq 0 ]; then
+          echo "### Comentarios — Gitleaks: nenhum segredo encontrado" >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+        fi
+        # Onde esta (URL do comentario), nunca o valor. Vai para o resumo E para o
+        # log: o resumo do job nao e legivel pela API, o log e.
+        {
+          echo "### Comentarios — Gitleaks: $total ocorrencia(s)"
+          echo ""
+          echo "| Regra | Onde | Autor | Linha | Ignore |"
+          echo "| --- | --- | --- | --- | --- |"
+          jq -r --slurpfile idx "$dump/index.json" '
+            .[] | (.File | split("/") | last) as $f
+            | ($idx[0][$f] // {}) as $m
+            | "| \(.RuleID) | \($m.url // $f) | \($m.author // "-") | \(.StartLine) | `\(.Key)` |"' "$report"
+        } | tee -a "$GITHUB_STEP_SUMMARY"
+        if [ "$FAIL_ON_FINDINGS" = "true" ]; then
+          echo "::error::Gitleaks encontrou $total ocorrencia(s) em issues/PRs/comentarios. Detalhes no resumo do job."
+        else
+          echo "::warning::Gitleaks encontrou $total ocorrencia(s) em issues/PRs/comentarios (fail-on-findings=false)."
+        fi
+
+    - name: Varrer com TruffleHog
+      id: trufflehog
+      shell: bash
+      env:
+        VERIFY: ${{ inputs.trufflehog-verify }}
+        FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+      run: |
+        set -uo pipefail
+        dump="$RUNNER_TEMP/gh-text-dump"
+        report="$RUNNER_TEMP/comments-trufflehog.jsonl"
+        args=(filesystem "$dump" --json --no-update)
+        if [ "$VERIFY" = "true" ]; then
+          args+=("--results=verified,unknown")
+        else
+          args+=(--no-verification)
+        fi
+        trufflehog "${args[@]}" > "$report.raw" 2> "$RUNNER_TEMP/comments-trufflehog.log"
+        status=$?
+        if [ $status -ne 0 ]; then
+          tail -n 20 "$RUNNER_TEMP/comments-trufflehog.log"
+          rm -f "$report.raw"
+          echo "::error::TruffleHog falhou ao executar (codigo $status)"
+          exit $status
+        fi
+        # mesmo baseline do Gitleaks: `<arquivo sem .txt>:<detector>`
+        jq -c --slurpfile ign "$RUNNER_TEMP/comments-ignore.json" '
+          (((.SourceMetadata.Data.Filesystem.file // "") | split("/") | last | sub("\\.txt$"; "")) + ":" + (.DetectorName // "?")) as $k
+          | select($ign[0] | index($k) | not) | . + {Key: $k}' "$report.raw" > "$report"
+        rm -f "$report.raw"
+        if [ "$VERIFY" = "true" ]; then
+          total=$(jq -s '[.[] | select(.Verified == true)] | length' "$report")
+          unknown=$(jq -s '[.[] | select(.Verified != true)] | length' "$report")
+        else
+          total=$(jq -s 'length' "$report")
+          unknown=0
+        fi
+        echo "total=$total" >> "$GITHUB_OUTPUT"
+
+        if [ "$total" -eq 0 ] && [ "$unknown" -eq 0 ]; then
+          echo "### Comentarios — TruffleHog: nenhum segredo ativo" >> "$GITHUB_STEP_SUMMARY"
+        else
+          {
+            echo "### Comentarios — TruffleHog: $total segredo(s), $unknown com verificacao inconclusiva"
+            echo ""
+            echo "| Detector | Status | Onde | Autor | Ignore |"
+            echo "| --- | --- | --- | --- | --- |"
+            jq -r --slurpfile idx "$dump/index.json" '
+              ((.SourceMetadata.Data.Filesystem.file // "") | split("/") | last) as $f
+              | ($idx[0][$f] // {}) as $m
+              | "| \(.DetectorName // "?") | \(if .Verified == true then "ATIVO" elif (.VerificationError // "") != "" then "inconclusivo" else "nao verificado" end) | \($m.url // $f) | \($m.author // "-") | `\(.Key)` |"' "$report"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+        fi
+        rm -f "$report"
+        if [ "$unknown" -gt 0 ]; then
+          echo "::warning::TruffleHog: $unknown credencial(is) em comentarios nao puderam ser verificadas (rede/API)."
+        fi
+        if [ "$total" -gt 0 ]; then
+          if [ "$FAIL_ON_FINDINGS" = "true" ]; then
+            echo "::error::TruffleHog: $total segredo(s) em issues/PRs/comentarios. Revogue a credencial e APAGUE o comentario (editar nao remove do historico de edicoes)."
+          else
+            echo "::warning::TruffleHog: $total segredo(s) em issues/PRs/comentarios (fail-on-findings=false)."
+          fi
+        fi
+
+    # O dump contem o texto integral (e, se houver, o segredo): nao sobrevive ao job.
+    - name: Remover dump
+      if: always()
+      shell: bash
+      run: rm -rf "$RUNNER_TEMP/gh-text-dump" "$RUNNER_TEMP/comments-gitleaks.json" "$RUNNER_TEMP/comments-trufflehog.jsonl" "$RUNNER_TEMP/comments-trufflehog.jsonl.raw"
+
+    - name: Gate de segredos em comentarios
+      shell: bash
+      env:
+        GITLEAKS_TOTAL: ${{ steps.gitleaks.outputs.total }}
+        TRUFFLEHOG_TOTAL: ${{ steps.trufflehog.outputs.total }}
+        SCANNED: ${{ steps.collect.outputs.count }}
+        FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+      run: |
+        set -euo pipefail
+        gl="${GITLEAKS_TOTAL:-0}"
+        th="${TRUFFLEHOG_TOTAL:-0}"
+        echo "textos=${SCANNED:-0} gitleaks=$gl trufflehog=$th fail-on-findings=$FAIL_ON_FINDINGS"
+        if [ "$FAIL_ON_FINDINGS" = "true" ] && [ $(( gl + th )) -gt 0 ]; then
+          echo "::error::Segredo em issue/PR/comentario: gitleaks=$gl, trufflehog=$th. Detalhes no resumo do job."
+          exit 1
+        fi

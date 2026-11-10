@@ -20,7 +20,12 @@ permissions:
 
 jobs:
   auto-merge:
-    if: github.actor == 'dependabot[bot]'
+    # `github.actor` e quem disparou o ULTIMO evento, nao o autor do PR: num PR de
+    # terceiro, um evento disparado pelo Dependabot (ex. `@dependabot recreate`)
+    # passaria na checagem antiga e o PR ganharia approve + auto-merge. O autor do
+    # PR (`pull_request.user.login`) nao muda e nao e forjavel. Commit de humano
+    # empilhado no PR e barrado pelo fetch-metadata abaixo (verifica o commit).
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -60,7 +65,11 @@ jobs:
 
           if [ "$match" = "true" ]; then
             if [ "$SHOULD_APPROVE" = "true" ]; then
-              gh pr review --approve "$PR_URL" || true
+              # approve pode falhar legitimamente (repo sem "Allow GitHub Actions to
+              # approve pull requests"); o auto-merge abaixo ainda vale, mas a falha
+              # fica visivel em vez de sumir num `|| true`.
+              gh pr review --approve "$PR_URL" \
+                || echo "::warning::nao foi possivel aprovar $PR_URL — o auto-merge depende das regras do branch"
             fi
             gh pr merge --auto --squash "$PR_URL"
             echo "Auto-merge squash habilitado para $PR_URL (tipo: $UPDATE_TYPE)"

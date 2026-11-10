@@ -1,0 +1,40 @@
+name: Comments Scan
+
+# Este repo e publico: qualquer pessoa abre issue e comenta. Cada texto novo e
+# varrido na hora (payload do evento, sem API) e uma vez por semana o repositorio
+# inteiro e revarrido.
+on:
+  # issue_comment roda com o workflow do branch default e token so de leitura; o
+  # corpo do comentario e lido do payload como arquivo, nunca executado.
+  issue_comment: # zizmor: ignore[dangerous-triggers]
+    types: [created, edited]
+  issues:
+    types: [opened, edited]
+  pull_request_review:
+    types: [submitted, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+  schedule:
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: comments-scan-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  comments:
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    uses: juninmd/base-actions/.github/workflows/reusable-comments-scan.yml@main
+    with:
+      # Baseline triado na primeira varredura (PR #54):
+      # - issue #25: senha "fake-..." de uma reproducao com dados sinteticos.
+      # A chave Gemini truncada na descricao do PR #47 fica FORA do baseline de
+      # proposito: e credencial real -- entra aqui so depois de revogada.
+      ignore: issue-25:juninmd-hardcoded-password

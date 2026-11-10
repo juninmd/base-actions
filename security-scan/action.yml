@@ -1,5 +1,7 @@
 name: Security Scan
-description: Varredura de segredos no historico completo com Gitleaks
+description: >-
+  Varredura de segredos no historico git com Gitleaks (regex, ruleset central) e
+  TruffleHog (verifica a credencial ao vivo na API do provedor), lado a lado.
 
 inputs:
   gitleaks-version:
@@ -17,11 +19,42 @@ inputs:
       historico do reusable-security-scan deixa vazio.
     required: false
     default: ''
+  trufflehog:
+    description: >-
+      Roda o TruffleHog ao lado do Gitleaks. Os dois se complementam: o Gitleaks
+      casa formato (pega segredo ja revogado e padroes internos do ruleset), o
+      TruffleHog prova que a credencial AINDA autentica. Desligue so se o runner
+      nao tiver saida de rede para as APIs dos provedores.
+    required: false
+    default: 'true'
+  trufflehog-version:
+    description: Versao fixada do TruffleHog. Mesma usada em sast/action.yml.
+    required: false
+    default: '3.99.8'
+  trufflehog-verify:
+    description: >-
+      true = so credencial confirmada ao vivo reprova (--results=verified,unknown;
+      "unknown" = a verificacao falhou por rede e vira warning). false = modo
+      inventario (--no-verification): todo formato reconhecido conta como achado.
+    required: false
+    default: 'true'
+  trufflehog-args:
+    description: Args extras para o TruffleHog (ex. --exclude-paths=.trufflehog-exclude)
+    required: false
+    default: ''
 
 outputs:
   findings:
-    description: Quantidade de ocorrencias encontradas
+    description: Quantidade de ocorrencias encontradas pelo Gitleaks
     value: ${{ steps.scan.outputs.total }}
+  trufflehog-findings:
+    description: >-
+      Quantidade de segredos que reprovam pelo TruffleHog (verificados ao vivo; no
+      modo inventario, todos os detectados). Vazio quando trufflehog=false.
+    value: ${{ steps.trufflehog.outputs.total }}
+  trufflehog-unknown:
+    description: Segredos cuja verificacao ao vivo falhou (rede/API) — nao reprovam
+    value: ${{ steps.trufflehog.outputs.unknown }}
 
 runs:
   using: composite
@@ -35,55 +68,32 @@ runs:
         path: ${{ runner.temp }}/gitleaks-bin
         key: gitleaks-${{ runner.os }}-${{ runner.arch }}-${{ inputs.gitleaks-version }}
 
+    - name: Restaurar TruffleHog do cache
+      if: inputs.trufflehog == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: ${{ runner.temp }}/trufflehog-bin
+        key: trufflehog-${{ runner.os }}-${{ runner.arch }}-${{ inputs.trufflehog-version }}
+
     # Roda sempre e decide pelo binario, nao pelo cache-hit: se uma execucao
     # anterior falhar no meio do download, o cache guarda um diretorio vazio e
-    # confiar no cache-hit deixaria todas as execucoes seguintes sem gitleaks.
+    # confiar no cache-hit deixaria todas as execucoes seguintes sem scanner.
+    # install-tool.sh confere o sha256 FIXADO (do tarball e do binario do cache)
+    # e publica o diretorio no PATH.
     - name: Instalar Gitleaks
       shell: bash
       env:
         VERSION: ${{ inputs.gitleaks-version }}
-        ARCH: ${{ runner.arch }}
-      run: |
-        set -euo pipefail
-        dest="$RUNNER_TEMP/gitleaks-bin"
+        ACTION_PATH: ${{ github.action_path }}
+      run: bash "$ACTION_PATH/../scripts/install-tool.sh" gitleaks "$VERSION" "$RUNNER_TEMP/gitleaks-bin"
 
-        if [ -x "$dest/gitleaks" ] && "$dest/gitleaks" version 2>/dev/null | grep -qx "$VERSION"; then
-          echo "::notice::Gitleaks $VERSION reaproveitado do cache"
-          exit 0
-        fi
-        rm -rf "$dest"
-
-        case "$ARCH" in
-          X64) arch=x64 ;;
-          ARM64) arch=arm64 ;;
-          *) echo "::error::Arquitetura nao suportada pelo Gitleaks: $ARCH"; exit 1 ;;
-        esac
-
-        work="$(mktemp -d)"
-        base="https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}"
-        tarball="gitleaks_${VERSION}_linux_${arch}.tar.gz"
-        checksums="gitleaks_${VERSION}_checksums.txt"
-
-        curl -sSfL --retry 3 --retry-delay 2 -o "$work/$tarball" "$base/$tarball"
-        curl -sSfL --retry 3 --retry-delay 2 -o "$work/$checksums" "$base/$checksums"
-
-        # Ferramenta de seguranca sem verificacao de integridade vira vetor de
-        # supply chain: confere o release contra o checksum publicado.
-        ( cd "$work" && grep " $tarball\$" "$checksums" | sha256sum -c - )
-
-        tar -xzf "$work/$tarball" -C "$work" gitleaks
-        chmod +x "$work/gitleaks"
-        "$work/gitleaks" version
-
-        # So publica o diretorio depois do binario pronto e validado, para nunca
-        # deixar um estado parcial no caminho que sera cacheado.
-        mkdir -p "$dest"
-        mv "$work/gitleaks" "$dest/gitleaks"
-        rm -rf "$work"
-
-    - name: Publicar Gitleaks no PATH
+    - name: Instalar TruffleHog
+      if: inputs.trufflehog == 'true'
       shell: bash
-      run: echo "$RUNNER_TEMP/gitleaks-bin" >> "$GITHUB_PATH"
+      env:
+        VERSION: ${{ inputs.trufflehog-version }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: bash "$ACTION_PATH/../scripts/install-tool.sh" trufflehog "$VERSION" "$RUNNER_TEMP/trufflehog-bin"
 
     # O Gitleaks so enxerga config dentro do workspace do repo escaneado, entao a
     # config central e copiada pra ca. Config propria do repo sempre vence.
@@ -107,13 +117,40 @@ runs:
         fi
         echo "path=$cfg" >> "$GITHUB_OUTPUT"
 
-    - name: Varrer historico completo
+    # Um intervalo que o git nao resolve NAO pode chegar aos scanners: o gitleaks
+    # recebe "bad object" do `git log`, varre 0 commits e sai com "no leaks
+    # found" -- gate verde sem ter olhado nada. Acontece em clone raso
+    # (fetch-depth: 1) e depois de force-push, quando `github.event.before` ja
+    # nao existe. Na duvida o gate varre MAIS (historico disponivel), nunca menos.
+    - name: Validar intervalo da varredura
+      id: range
+      shell: bash
+      env:
+        LOG_OPTS: ${{ inputs.log-opts }}
+      run: |
+        set -euo pipefail
+        range="${LOG_OPTS:-}"
+        if [ "$(git rev-parse --is-shallow-repository 2>/dev/null || echo false)" = "true" ]; then
+          echo "::warning::Clone raso: a varredura de segredos so enxerga os commits baixados. Use fetch-depth: 0 no actions/checkout."
+        fi
+        if printf '%s' "$range" | grep -Eq '^[0-9a-f]{7,40}\.\.[0-9a-f]{7,40}$'; then
+          for sha in "${range%%..*}" "${range##*..}"; do
+            if ! git rev-parse --verify --quiet "${sha}^{commit}" > /dev/null; then
+              echo "::warning::Commit $sha do intervalo nao existe neste clone (clone raso ou force-push). Varrendo todo o historico disponivel no lugar."
+              range=""
+              break
+            fi
+          done
+        fi
+        echo "log-opts=$range" >> "$GITHUB_OUTPUT"
+
+    - name: Varrer com Gitleaks
       id: scan
       shell: bash
       env:
         CONFIG: ${{ steps.cfg.outputs.path }}
         FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
-        LOG_OPTS: ${{ inputs.log-opts }}
+        LOG_OPTS: ${{ steps.range.outputs.log-opts }}
       run: |
         set -uo pipefail
         gitleaks version
@@ -125,10 +162,19 @@ runs:
         # Sem intervalo varre o historico inteiro; com intervalo olha so os commits
         # do PR ou do push. Um gate de PR que reprova por segredo antigo do
         # repositorio nao diz nada sobre a mudanca proposta e trava todo mundo.
-        range_args=""
+        # array, nao string solta: o intervalo vem de input e nao pode virar
+        # flag extra do gitleaks por word-splitting.
+        range_args=()
         if [ -n "${LOG_OPTS:-}" ]; then
           echo "::notice::Varredura incremental: $LOG_OPTS"
-          range_args="--log-opts=$LOG_OPTS"
+          range_args=("--log-opts=$LOG_OPTS")
+          # O gate usa a config e o .gitleaksignore do proprio PR. Quem altera
+          # esses arquivos pode estar calando a varredura: fica visivel no run.
+          changed=$(git diff --name-only "${LOG_OPTS/../...}" -- \
+            .gitleaks.toml gitleaks.toml .gitleaksignore 2>/dev/null | tr '\n' ' ' || true)
+          if [ -n "$changed" ]; then
+            echo "::warning::Este intervalo altera a configuracao da varredura de segredos ($changed). Revise allowlist/ignore novos antes do merge."
+          fi
         else
           echo "::notice::Varredura do historico completo"
         fi
@@ -140,7 +186,7 @@ runs:
           --report-path "$report" \
           --redact \
           --no-banner \
-          --exit-code 0 $range_args
+          --exit-code 0 "${range_args[@]}"
         status=$?
         if [ $status -ne 0 ]; then
           echo "::error::Gitleaks falhou ao executar (codigo $status)"
@@ -165,8 +211,121 @@ runs:
           jq -r '.[] | "| \(.RuleID) | \(.File) | \(.StartLine) | \((.Commit // "")[0:8]) |"' "$report"
         } >> "$GITHUB_STEP_SUMMARY"
 
+        # Nao encerra aqui: o TruffleHog ainda roda e o passo "Gate" decide. Um
+        # PR com dois problemas mostra os dois de uma vez.
         if [ "$FAIL_ON_FINDINGS" = "true" ]; then
           echo "::error::Gitleaks encontrou $total ocorrencia(s). Detalhes no resumo do job."
+        else
+          echo "::warning::Gitleaks encontrou $total ocorrencia(s) (fail-on-findings=false)."
+        fi
+
+    # TruffleHog le o mesmo git clonado (file://), sem API do GitHub e sem
+    # permissao extra. Com verify=true cada candidato e testado na API do
+    # provedor: so credencial VIVA reprova, entao o gate nao sofre com fixture,
+    # exemplo de doc nem segredo ja revogado -- isso e trabalho do Gitleaks.
+    - name: Varrer com TruffleHog
+      id: trufflehog
+      if: inputs.trufflehog == 'true'
+      shell: bash
+      env:
+        LOG_OPTS: ${{ steps.range.outputs.log-opts }}
+        VERIFY: ${{ inputs.trufflehog-verify }}
+        EXTRA_ARGS: ${{ inputs.trufflehog-args }}
+        FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+      run: |
+        set -uo pipefail
+        trufflehog --version
+        report="$RUNNER_TEMP/trufflehog-report.jsonl"
+
+        args=(git "file://$PWD" --json --no-update)
+        if [ "$VERIFY" = "true" ]; then
+          args+=("--results=verified,unknown")
+        else
+          args+=(--no-verification)
+        fi
+
+        # Mesmo intervalo do Gitleaks. O TruffleHog anda de --branch para tras
+        # ate --since-commit, entao a base precisa ser ancestral da head: usa o
+        # merge-base (a base do PR pode ter andado depois do fork da branch).
+        if printf '%s' "${LOG_OPTS:-}" | grep -Eq '^[0-9a-f]{7,40}\.\.[0-9a-f]{7,40}$'; then
+          base="${LOG_OPTS%%..*}"
+          head="${LOG_OPTS##*..}"
+          if since=$(git merge-base "$base" "$head" 2>/dev/null); then
+            echo "::notice::TruffleHog incremental: $since..$head"
+            args+=("--since-commit=$since" "--branch=$head")
+          else
+            echo "::notice::TruffleHog: sem merge-base para $LOG_OPTS — varrendo o historico completo"
+          fi
+        elif [ -n "${LOG_OPTS:-}" ]; then
+          echo "::notice::TruffleHog: log-opts fora do formato base..head — varrendo o historico completo"
+        fi
+
+        extra_args=()
+        if [ -n "$EXTRA_ARGS" ]; then read -ra extra_args <<< "$EXTRA_ARGS"; fi
+
+        # stdout e JSONL de achados (contem o valor: fica so no RUNNER_TEMP e e
+        # apagado no fim); os logs do scanner vao para stderr.
+        trufflehog "${args[@]}" "${extra_args[@]}" > "$report" 2> "$RUNNER_TEMP/trufflehog.log"
+        status=$?
+        if [ $status -ne 0 ]; then
+          tail -n 20 "$RUNNER_TEMP/trufflehog.log"
+          rm -f "$report"
+          echo "::error::TruffleHog falhou ao executar (codigo $status)"
+          exit $status
+        fi
+
+        if [ "$VERIFY" = "true" ]; then
+          total=$(jq -s '[.[] | select(.Verified == true)] | length' "$report")
+          unknown=$(jq -s '[.[] | select(.Verified != true)] | length' "$report")
+          label="verificado(s) ao vivo"
+        else
+          total=$(jq -s 'length' "$report")
+          unknown=0
+          label="detectado(s) (sem verificacao)"
+        fi
+        {
+          echo "total=$total"
+          echo "unknown=$unknown"
+        } >> "$GITHUB_OUTPUT"
+
+        if [ "$total" -eq 0 ] && [ "$unknown" -eq 0 ]; then
+          echo "### TruffleHog: nenhum segredo ativo" >> "$GITHUB_STEP_SUMMARY"
+        else
+          # Onde esta, nunca o valor: Raw/RawV2/Redacted nao entram no resumo.
+          {
+            echo "### TruffleHog: $total segredo(s) $label, $unknown com verificacao inconclusiva"
+            echo ""
+            echo "| Detector | Status | Arquivo | Linha | Commit |"
+            echo "| --- | --- | --- | --- | --- |"
+            jq -r '"| \(.DetectorName // "?") | \(if .Verified == true then "ATIVO" elif (.VerificationError // "") != "" then "inconclusivo" else "nao verificado" end) | \(.SourceMetadata.Data.Git.file // "-") | \(.SourceMetadata.Data.Git.line // 0) | \((.SourceMetadata.Data.Git.commit // "")[0:8]) |"' "$report"
+          } >> "$GITHUB_STEP_SUMMARY"
+        fi
+        rm -f "$report"
+
+        if [ "$unknown" -gt 0 ]; then
+          echo "::warning::TruffleHog: $unknown credencial(is) nao puderam ser verificadas (rede/API). Confira o resumo do job."
+        fi
+        if [ "$total" -gt 0 ]; then
+          if [ "$FAIL_ON_FINDINGS" = "true" ]; then
+            echo "::error::TruffleHog: $total segredo(s) $label. Revogue a credencial ANTES de limpar o historico."
+          else
+            echo "::warning::TruffleHog: $total segredo(s) $label (fail-on-findings=false)."
+          fi
+        fi
+
+    - name: Gate de segredos
+      shell: bash
+      env:
+        GITLEAKS_TOTAL: ${{ steps.scan.outputs.total }}
+        TRUFFLEHOG_TOTAL: ${{ steps.trufflehog.outputs.total }}
+        FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+      run: |
+        set -euo pipefail
+        gl="${GITLEAKS_TOTAL:-0}"
+        th="${TRUFFLEHOG_TOTAL:-0}"
+        echo "gitleaks=$gl trufflehog=$th fail-on-findings=$FAIL_ON_FINDINGS"
+        if [ "$FAIL_ON_FINDINGS" = "true" ] && [ $(( gl + th )) -gt 0 ]; then
+          echo "::error::Varredura de segredos reprovou: gitleaks=$gl, trufflehog=$th. Detalhes no resumo do job."
           exit 1
         fi
 
