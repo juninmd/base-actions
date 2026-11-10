@@ -45,7 +45,7 @@ jobs:
         with:
           mode: full
           fail-on-findings: 'false'
-          ignore: issue-25:juninmd-hardcoded-password
+          ignore: issue-25:juninmd-hardcoded-password pull-request-47:juninmd-env-secret-assignment
       - name: Exigir que a varredura leu alguma coisa
         env:
           SCANNED: ${{ steps.sweep.outputs.scanned }}

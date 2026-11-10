@@ -80,10 +80,13 @@ jobs:
       # API de conteudo e morre em todo PR. `pull-requests: write` basta para rotular
       # (POST /issues/{n}/labels aceita o escopo de PR); `issues: write` so e preciso
       # para CRIAR label, e isso vive no job `draft`.
-      # `contents: write` entrou aqui de carona num bump do Dependabot (#13) e
-      # contradizia o comentario acima: job de pull_request_target com
-      # disable-releaser nao cria release e nao precisa escrever no repo.
-      contents: read
+      # `contents: write` e necessario de verdade: no release-drafter v7 o
+      # `disable-releaser: true` NAO impede a action de criar/atualizar o draft de
+      # release, e com `contents: read` todo PR falha em "Creating new release...
+      # Resource not accessible by integration". O #54 tinha rebaixado para read
+      # e quebrou o autolabel; restaurado aqui. O risco fica contido porque este
+      # job nao faz checkout nem executa nada do PR (ver aviso acima).
+      contents: write
       pull-requests: write
     runs-on: ubuntu-latest
     timeout-minutes: 5
