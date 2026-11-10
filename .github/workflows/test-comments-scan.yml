@@ -35,11 +35,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      # mode full: num pull_request o modo auto leria so o payload do PR
+      # mode full: num pull_request o modo auto leria so o payload do PR.
+      # fail-on-findings false: este job prova a COLETA pela API real (e mostra os
+      # achados no log); quem prova que achado reprova e o job de segredo plantado.
+      # Texto antigo de issue/PR nao pode deixar o CI de um PR sem relacao vermelho
+      # -- o alarme disso e o comments-scan.yml agendado.
       - id: sweep
         uses: ./comments-scan
         with:
           mode: full
+          fail-on-findings: 'false'
+          ignore: issue-25:juninmd-hardcoded-password
       - name: Exigir que a varredura leu alguma coisa
         env:
           SCANNED: ${{ steps.sweep.outputs.scanned }}

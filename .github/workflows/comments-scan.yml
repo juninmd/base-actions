@@ -32,3 +32,9 @@ jobs:
       issues: read
       pull-requests: read
     uses: juninmd/base-actions/.github/workflows/reusable-comments-scan.yml@main
+    with:
+      # Baseline triado na primeira varredura (PR #54):
+      # - issue #25: senha "fake-..." de uma reproducao com dados sinteticos.
+      # A chave Gemini truncada na descricao do PR #47 fica FORA do baseline de
+      # proposito: e credencial real -- entra aqui so depois de revogada.
+      ignore: issue-25:juninmd-hardcoded-password

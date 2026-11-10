@@ -45,6 +45,13 @@ on:
         type: boolean
         required: false
         default: true
+      ignore:
+        description: >-
+          Baseline de achados ja triados (`<tipo>-<id>:<regra>`, separados por espaco
+          ou linha), como aparece na coluna "Ignore" do resumo.
+        type: string
+        required: false
+        default: ''
 
 # Sem `concurrency` e sem `secrets:` de proposito (mesmos motivos do
 # reusable-validate / reusable-security-scan).
@@ -70,3 +77,4 @@ jobs:
           since: ${{ inputs.since }}
           trufflehog-verify: ${{ inputs.trufflehog-verify }}
           fail-on-findings: ${{ inputs.fail-on-findings }}
+          ignore: ${{ inputs.ignore }}

@@ -267,6 +267,9 @@ jobs:
 
 Achou segredo em comentario: **revogue a credencial e apague o comentario** — editar nao
 remove o valor do historico de edicoes do GitHub.
+Falso positivo confirmado (ou credencial ja revogada) entra no baseline pelo input
+`ignore`, com a chave que o proprio resumo do job mostra na coluna "Ignore"
+(ex. `ignore: issue-25:juninmd-hardcoded-password`).
 
 ## 🛡️ Camadas de seguranca
 
