@@ -35,6 +35,10 @@ jobs:
     with:
       # Baseline triado na primeira varredura (PR #54):
       # - issue #25: senha "fake-..." de uma reproducao com dados sinteticos.
-      # A chave Gemini truncada na descricao do PR #47 fica FORA do baseline de
-      # proposito: e credencial real -- entra aqui so depois de revogada.
-      ignore: issue-25:juninmd-hardcoded-password
+      # - PR #47: a descricao tinha uma chave Gemini colada; ja foi editada e hoje
+      #   mostra so o prefixo seguido de pontos, que ainda casa a regra generica
+      #   de atribuicao. A chave original continua no historico de edicoes do PR
+      #   ate a revisao ser apagada por la -- e precisa ser revogada de qualquer forma.
+      ignore: >-
+        issue-25:juninmd-hardcoded-password
+        pull-request-47:juninmd-env-secret-assignment
