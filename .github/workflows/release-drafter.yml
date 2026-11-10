@@ -5,7 +5,7 @@ on:
     branches: [main, master]
   # pull_request_target: o autolabeler precisa de escrita tambem em PR de fork
   # (em `pull_request` o token e read-only). Ver a guarda no job `autolabel`.
-  pull_request_target:
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [opened, reopened, synchronize]
 
 permissions:
@@ -80,8 +80,10 @@ jobs:
       # API de conteudo e morre em todo PR. `pull-requests: write` basta para rotular
       # (POST /issues/{n}/labels aceita o escopo de PR); `issues: write` so e preciso
       # para CRIAR label, e isso vive no job `draft`.
-      # Adicionado contents: write para permitir criacao de release quando necessario
-      contents: write
+      # `contents: write` entrou aqui de carona num bump do Dependabot (#13) e
+      # contradizia o comentario acima: job de pull_request_target com
+      # disable-releaser nao cria release e nao precisa escrever no repo.
+      contents: read
       pull-requests: write
     runs-on: ubuntu-latest
     timeout-minutes: 5

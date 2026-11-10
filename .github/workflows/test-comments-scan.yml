@@ -1,0 +1,110 @@
+name: Test Comments Scan Action
+
+# Roda a action do proprio branch (./comments-scan), nao a de @main.
+on:
+  push:
+    paths:
+      - 'comments-scan/**'
+      - 'scripts/**'
+      - 'gitleaks.toml'
+      - '.github/workflows/reusable-comments-scan.yml'
+      - '.github/workflows/test-comments-scan.yml'
+  pull_request:
+    paths:
+      - 'comments-scan/**'
+      - 'scripts/**'
+      - 'gitleaks.toml'
+      - '.github/workflows/reusable-comments-scan.yml'
+      - '.github/workflows/test-comments-scan.yml'
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sweep-self:
+    name: Varre issues, PRs e comentarios do proprio repositorio
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      # mode full: num pull_request o modo auto leria so o payload do PR
+      - id: sweep
+        uses: ./comments-scan
+        with:
+          mode: full
+      - name: Exigir que a varredura leu alguma coisa
+        env:
+          SCANNED: ${{ steps.sweep.outputs.scanned }}
+        run: |
+          set -euo pipefail
+          echo "textos varridos: $SCANNED"
+          # este repo tem dezenas de PRs: zero texto e coleta quebrada, nao repo limpo
+          if [ -z "$SCANNED" ] || [ "$SCANNED" -lt 1 ]; then
+            echo "::error::a varredura completa nao leu nenhum texto — a coleta pela API nao esta funcionando"
+            exit 1
+          fi
+
+  detects-planted-comment:
+    name: Prova que um segredo em comentario e barrado
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      # controle: comentario sem segredo passa. Separa "reprovou pelo segredo" de
+      # "reprovou por infra" (download do scanner, python...).
+      - name: Payload de controle (sem segredo)
+        run: |
+          set -euo pipefail
+          jq -n '{action: "created", comment: {id: 1, body: "lgtm, pode mesclar",
+            html_url: "https://example.invalid/1", user: {login: "ci"}}}' > "$RUNNER_TEMP/event-ok.json"
+
+      - id: control
+        continue-on-error: true
+        uses: ./comments-scan
+        with:
+          mode: event
+          event-path: ${{ runner.temp }}/event-ok.json
+
+      # O segredo e gerado na hora, e nao escrito aqui, para o proprio arquivo de
+      # teste nao virar um vazamento commitado. E fake: so o formato e de PAT.
+      - name: Payload com token em formato de GitHub PAT
+        run: |
+          set -euo pipefail
+          jq -n --arg body "segue o token: ghp_$(openssl rand -hex 18)" \
+            '{action: "created", comment: {id: 2, body: $body,
+              html_url: "https://example.invalid/2", user: {login: "ci"}}}' > "$RUNNER_TEMP/event-leak.json"
+
+      - id: probe
+        continue-on-error: true
+        uses: ./comments-scan
+        with:
+          mode: event
+          event-path: ${{ runner.temp }}/event-leak.json
+
+      - name: Assercao
+        env:
+          CONTROL: ${{ steps.control.outcome }}
+          PROBE: ${{ steps.probe.outcome }}
+          FINDINGS: ${{ steps.probe.outputs.findings }}
+        run: |
+          set -euo pipefail
+          echo "controle=$CONTROL probe=$PROBE gitleaks=$FINDINGS"
+          [ "$CONTROL" = "success" ] || { echo "::error::comentario limpo reprovou — problema de infra, a assercao abaixo nao prova nada"; exit 1; }
+          [ "$PROBE" = "failure" ] || { echo "::error::comentario com token passou — a varredura de comentarios nao esta funcionando"; exit 1; }
+          if [ -z "$FINDINGS" ] || [ "$FINDINGS" -lt 1 ]; then
+            echo "::error::reprovou sem achado do Gitleaks (findings='$FINDINGS') — falhou por erro de execucao, nao por deteccao"
+            exit 1
+          fi

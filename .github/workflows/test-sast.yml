@@ -9,11 +9,13 @@ on:
   push:
     paths:
       - 'sast/**'
+      - 'scripts/**'
       - '.github/workflows/reusable-sast.yml'
       - '.github/workflows/test-sast.yml'
   pull_request:
     paths:
       - 'sast/**'
+      - 'scripts/**'
       - '.github/workflows/reusable-sast.yml'
       - '.github/workflows/test-sast.yml'
   workflow_call:
@@ -67,14 +69,23 @@ jobs:
         continue-on-error: true
         with:
           trufflehog-verify: 'false'
+          trivy-scanners: 'vuln'
           trivy-severity: 'CRITICAL'
-      - name: Exigir reprovacao do probe
-        if: steps.probe.outcome == 'success'
+          fail-semgrep: 'false'
+      # Falhar nao basta: a action tambem falha se o download quebrar. So vale
+      # se reprovou POR ter contado o segredo.
+      - name: Exigir reprovacao por achado do TruffleHog
+        env:
+          OUTCOME: ${{ steps.probe.outcome }}
+          FINDINGS: ${{ steps.probe.outputs.trufflehog-findings }}
         run: |
-          echo "::error::O sast passou com credencial fake plantada (trufflehog-findings=${{ steps.probe.outputs.trufflehog-findings }}). Nao barrou."
-          exit 1
-      - name: Resumo do probe
-        run: echo "probe outcome=failure (TruffleHog contou ${{ steps.probe.outputs.trufflehog-findings }} achado(s)). OK."
+          set -euo pipefail
+          echo "outcome=$OUTCOME trufflehog-findings=$FINDINGS"
+          [ "$OUTCOME" = "failure" ] || { echo "::error::O sast passou com credencial fake plantada. Nao barrou."; exit 1; }
+          if [ -z "$FINDINGS" ] || [ "$FINDINGS" -lt 1 ]; then
+            echo "::error::O sast falhou sem achado do TruffleHog (findings='$FINDINGS'): erro de execucao, nao deteccao."
+            exit 1
+          fi
 
   trivy-fails-on-vulnerable-dep:
     name: Prova que o Trivy barrou dependencia vulneravel
@@ -116,10 +127,15 @@ jobs:
         with:
           trivy-scanners: 'vuln'
           trivy-severity: 'HIGH,CRITICAL'
-      - name: Exigir reprovacao do probe
-        if: steps.probe.outcome == 'success'
+      - name: Exigir reprovacao por achado do Trivy
+        env:
+          OUTCOME: ${{ steps.probe.outcome }}
+          FINDINGS: ${{ steps.probe.outputs.trivy-findings }}
         run: |
-          echo "::error::O sast passou com lodash 4.17.15 (CVEs HIGH/CRITICAL) plantado. Nao barrou. Trivy contou ${{ steps.probe.outputs.trivy-findings }}."
-          exit 1
-      - name: Resumo do probe
-        run: echo "probe outcome=failure (Trivy contou ${{ steps.probe.outputs.trivy-findings }} achado(s)). OK."
+          set -euo pipefail
+          echo "outcome=$OUTCOME trivy-findings=$FINDINGS"
+          [ "$OUTCOME" = "failure" ] || { echo "::error::O sast passou com lodash 4.17.15 (CVEs HIGH/CRITICAL) plantado. Nao barrou."; exit 1; }
+          if [ -z "$FINDINGS" ] || [ "$FINDINGS" -lt 1 ]; then
+            echo "::error::O sast falhou sem achado do Trivy (findings='$FINDINGS'): erro de execucao, nao deteccao."
+            exit 1
+          fi

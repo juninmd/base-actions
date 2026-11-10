@@ -8,6 +8,7 @@ on:
   push:
     paths:
       - 'security-scan/**'
+      - 'scripts/**'
       - 'gitleaks.toml'
       - '.gitleaksignore'
       - '.github/workflows/reusable-security-scan.yml'
@@ -15,6 +16,7 @@ on:
   pull_request:
     paths:
       - 'security-scan/**'
+      - 'scripts/**'
       - 'gitleaks.toml'
       - '.gitleaksignore'
       - '.github/workflows/reusable-security-scan.yml'
@@ -83,3 +85,78 @@ jobs:
             exit 1
           fi
           echo "Scan barrou o segredo plantado: $FINDINGS achado(s), como esperado."
+
+  trufflehog-detects-planted-secret:
+    name: Prova que o TruffleHog roda ao lado do Gitleaks e barra um segredo
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Token fake com FORMATO de GitHub PAT, gerado na hora. Nao autentica em
+      # lugar nenhum, entao o modo padrao (so credencial viva reprova) o
+      # descartaria: o probe usa trufflehog-verify=false para provar a DETECCAO
+      # no historico git e no intervalo do commit plantado.
+      - name: Plantar token fake em um commit
+        id: plant
+        run: |
+          set -euo pipefail
+          echo "base=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          mkdir -p .security-scan-probe
+          printf 'github_token = "ghp_%s"\n' "$(openssl rand -hex 18)" > .security-scan-probe/token.txt
+          git -c user.email=ci@example.com -c user.name=ci add -f .security-scan-probe/token.txt
+          git -c user.email=ci@example.com -c user.name=ci commit -q -m 'test: token fake para o teste do trufflehog'
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      # verify ligado (padrao): o token fake NAO pode reprovar pelo TruffleHog --
+      # e isso que mantem o gate livre de falso positivo.
+      - id: verified
+        uses: ./security-scan
+        continue-on-error: true
+        with:
+          log-opts: ${{ steps.plant.outputs.base }}..${{ steps.plant.outputs.head }}
+
+      - id: inventory
+        uses: ./security-scan
+        continue-on-error: true
+        with:
+          log-opts: ${{ steps.plant.outputs.base }}..${{ steps.plant.outputs.head }}
+          trufflehog-verify: 'false'
+
+      # intervalo que o git nao resolve: antes o gitleaks varria 0 commits e
+      # passava verde. Agora cai no historico completo e acha o token.
+      - id: badrange
+        uses: ./security-scan
+        continue-on-error: true
+        with:
+          log-opts: 0123456789abcdef0123456789abcdef01234567..${{ steps.plant.outputs.head }}
+          trufflehog: 'false'
+
+      - name: Assercoes
+        env:
+          VERIFIED_TH: ${{ steps.verified.outputs.trufflehog-findings }}
+          INVENTORY_OUTCOME: ${{ steps.inventory.outcome }}
+          INVENTORY_TH: ${{ steps.inventory.outputs.trufflehog-findings }}
+          BADRANGE_OUTCOME: ${{ steps.badrange.outcome }}
+          BADRANGE_GL: ${{ steps.badrange.outputs.findings }}
+        run: |
+          set -euo pipefail
+          echo "verify=true: trufflehog=$VERIFIED_TH | verify=false: $INVENTORY_OUTCOME trufflehog=$INVENTORY_TH | intervalo invalido: $BADRANGE_OUTCOME gitleaks=$BADRANGE_GL"
+          if [ "$VERIFIED_TH" != "0" ]; then
+            echo "::error::token fake contou como verificado (trufflehog-findings='$VERIFIED_TH'): o TruffleHog nao rodou ou a verificacao esta quebrada"
+            exit 1
+          fi
+          if [ "$INVENTORY_OUTCOME" != "failure" ] || [ -z "$INVENTORY_TH" ] || [ "$INVENTORY_TH" -lt 1 ]; then
+            echo "::error::TruffleHog nao detectou o token plantado no intervalo (outcome=$INVENTORY_OUTCOME, findings='$INVENTORY_TH')"
+            exit 1
+          fi
+          if [ "$BADRANGE_OUTCOME" != "failure" ] || [ -z "$BADRANGE_GL" ] || [ "$BADRANGE_GL" -lt 1 ]; then
+            echo "::error::intervalo invalido passou verde (outcome=$BADRANGE_OUTCOME, gitleaks='$BADRANGE_GL'): o gate voltou a varrer 0 commits"
+            exit 1
+          fi
+          echo "TruffleHog e validacao de intervalo corretos."

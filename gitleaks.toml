@@ -560,6 +560,17 @@ secretGroup = 1
 keywords = ["fw_"]
 tags = ["fireworks", "api-key", "juninmd"]
 
+  # `fw_` tambem e prefixo de identificador (forwards do AMX Mod X:
+  # fw_PlayerPreThinkPost...). Chave real e base62 aleatoria: 20+ caracteres
+  # sem NENHUM digito e nome de funcao, nao credencial. A varredura da conta
+  # achou 156 falsos positivos assim, todos em .sma/.inc.
+  [[rules.allowlists]]
+  description = "Identificador so com letras (nome de funcao/forward), nao chave"
+  regexTarget = "secret"
+  regexes = [
+    '''^fw_[A-Za-z_]+$''',
+  ]
+
 [[rules]]
 id = "juninmd-replicate-api-token"
 description = "Token de API do Replicate"

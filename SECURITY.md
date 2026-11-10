@@ -22,6 +22,20 @@ Inclua a action/workflow afetado, os passos para reproduzir e o impacto esperado
 ## Praticas adotadas
 
 - Actions de terceiros fixadas por SHA de commit (validado em CI).
-- Binarios baixados (gitleaks, ollama) conferidos contra checksum publicado.
+- Scanners (gitleaks, trufflehog, trivy) instalados com sha256 FIXADO no repo
+  (`scripts/install-tool.sh`), conferido no download e no binario vindo do cache;
+  ollama conferido contra o checksum publicado.
 - Inputs passados por `env:`, nunca interpolados no `run:` (validado em CI).
-- Varredura de segredos com Gitleaks em todo PR.
+- Workflows auditados com zizmor em todo PR (gatilho perigoso, permissao excessiva,
+  credencial persistida, checagem de bot forjavel).
+- Varredura de segredos com Gitleaks + TruffleHog em todo PR, e em issues, PRs e
+  comentarios (`comments-scan`).
+- Dependabot com cooldown de 7 dias antes de propor um release novo.
+
+## Vazou uma credencial?
+
+1. **Revogue/rotacione primeiro.** Reescrever historico ou apagar comentario nao
+   desfaz a exposicao: clones, forks e caches ja tem o valor.
+2. So depois limpe: `git filter-repo` no historico; comentario se apaga (editar
+   mantem o valor no historico de edicoes).
+3. Confira nos logs do provedor se a credencial foi usada.

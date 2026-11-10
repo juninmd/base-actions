@@ -9,15 +9,22 @@ updates:
   - package-ecosystem: github-actions
     directories:
       - /
+      - /comments-scan
       - /deploy-to-argocd
       - /docker-build-push
       - /quality-check
+      - /sast
       - /security-scan
       - /setup-node-pnpm
       - /setup-ollama
       - /validate-pr
     schedule:
       interval: weekly
+    # Release publicado ha menos de 7 dias nao vira PR: a maioria dos releases
+    # comprometidos (tag movida, conta de mantenedor tomada) e detectada e
+    # revertida nesse intervalo. Com auto-merge ligado, e a unica espera que existe.
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ['*']

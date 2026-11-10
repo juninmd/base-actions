@@ -1,0 +1,11 @@
+# Config do zizmor (auditoria estatica dos workflows). Vale para o gate `lint` do
+# CI e para o scanner zizmor da action `sast`.
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        # Politica deliberada (AGENTS.md): as actions internas sao referenciadas
+        # por @main -- a atualizacao e centralizada e passa a valer no proximo
+        # run. Todo o resto continua obrigado a SHA de commit.
+        "juninmd/base-actions/*": ref-pin
+        "*": hash-pin
