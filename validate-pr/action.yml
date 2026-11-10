@@ -56,6 +56,19 @@ inputs:
 runs:
   using: composite
   steps:
+    # Esta action instala dependencias e roda build/lint/test DO PR. Em
+    # pull_request_target o job tem o token e os secrets do repositorio base:
+    # se o checkout apontar para a head do PR, qualquer fork executa codigo com
+    # essas credenciais ("pwn request"); se apontar para a base, o gate valida o
+    # codigo errado e passa verde. Nos dois casos o gatilho certo e pull_request.
+    # A varredura da conta (217 repos) nao achou nenhum consumidor nesse caso.
+    - name: Recusar pull_request_target
+      if: github.event_name == 'pull_request_target'
+      shell: bash
+      run: |
+        echo "::error::validate-pr nao roda em pull_request_target: ele executa codigo do PR e esse gatilho entrega token e secrets do repositorio base. Use o evento pull_request."
+        exit 1
+
     - name: Check for committed secrets (Basic)
       shell: bash
       run: |

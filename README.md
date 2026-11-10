@@ -356,6 +356,8 @@ O que **nao** funciona e declarar menos do que o workflow chamado pede — isso 
   autor do PR (`pull_request.user.login`).
 - `setup-ollama`: `ollama-host` com espaco ou quebra de linha e rejeitado (o valor vai para
   o `GITHUB_ENV`).
+- `validate-pr`: recusa rodar em `pull_request_target` (executaria codigo do PR com o token
+  e os secrets do repositorio base). Use `pull_request`.
 - `validate-pr`: teste Python vermelho agora **derruba o job** (antes era engolido por
   `2>/dev/null || echo "No tests found"`).
 - `reusable-validate.yml`: os inputs `node-version`/`python-version`/`pnpm-version` voltaram
