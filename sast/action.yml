@@ -50,6 +50,12 @@ inputs:
       `auto`, ou caminho de arquivo/diretorio de regras do proprio repo.
     required: false
     default: 'p/default'
+  trivy-skip-files:
+    description: >-
+      Arquivos que o Trivy ignora (comma-separated), ex. o codigo de um scanner
+      de segredos, que carrega token falso como fixture.
+    required: false
+    default: ''
   zizmor:
     description: >-
       Audita .github/workflows e action.yml com o zizmor (injecao de template,
@@ -205,11 +211,13 @@ runs:
         SCANNERS: ${{ inputs.trivy-scanners }}
         SEVERITY: ${{ inputs.trivy-severity }}
         SKIP_DIRS: ${{ inputs.trivy-skip-dirs }}
+        SKIP_FILES: ${{ inputs.trivy-skip-files }}
       run: |
         set -uo pipefail
         report="$RUNNER_TEMP/trivy-report.json"
         skip_args=()
-        if [ -n "$SKIP_DIRS" ]; then skip_args=(--skip-dirs "$SKIP_DIRS"); fi
+        if [ -n "$SKIP_DIRS" ]; then skip_args+=(--skip-dirs "$SKIP_DIRS"); fi
+        if [ -n "$SKIP_FILES" ]; then skip_args+=(--skip-files "$SKIP_FILES"); fi
         trivy fs . \
           --scanners "$SCANNERS" \
           --severity "$SEVERITY" \

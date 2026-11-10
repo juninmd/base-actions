@@ -347,7 +347,8 @@ O que **nao** funciona e declarar menos do que o workflow chamado pede — isso 
   verde. Antes o Gitleaks recebia `bad object`, varria **0 commits** e reportava "no leaks
   found"; agora cai na varredura do historico disponivel, com warning.
 - `sast`: os achados do scanner `secret` do Trivy passaram a **contar** (eram descartados em
-  silencio). Fixture com segredo falso de proposito: `trivy-skip-dirs` ou `.trivyignore`.
+  silencio). Fixture com segredo falso de proposito: `trivy-skip-dirs`, `trivy-skip-files`
+  ou `.trivyignore`.
 - `sast`: todos os scanners rodam e um unico gate reprova no fim (antes o primeiro com
   achado pulava os seguintes). Semgrep que nao instala **reprova** com `fail-semgrep: true`
   (antes sumia num `::debug::` com job verde).

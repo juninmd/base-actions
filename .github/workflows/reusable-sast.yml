@@ -43,6 +43,11 @@ on:
         type: string
         required: false
         default: ''
+      trivy-skip-files:
+        description: Arquivos ignorados pelo Trivy (comma-separated)
+        type: string
+        required: false
+        default: ''
       zizmor:
         description: Audita os workflows do GitHub Actions com o zizmor
         type: boolean
@@ -111,6 +116,7 @@ jobs:
           fail-trivy: ${{ inputs.fail-trivy }}
           fail-semgrep: ${{ inputs.fail-semgrep }}
           trivy-skip-dirs: ${{ inputs.trivy-skip-dirs }}
+          trivy-skip-files: ${{ inputs.trivy-skip-files }}
           zizmor: ${{ inputs.zizmor }}
           zizmor-version: ${{ inputs.zizmor-version }}
           zizmor-min-severity: ${{ inputs.zizmor-min-severity }}
