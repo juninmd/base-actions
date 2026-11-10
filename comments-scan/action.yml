@@ -149,7 +149,8 @@ runs:
           echo "### Comentarios — Gitleaks: nenhum segredo encontrado" >> "$GITHUB_STEP_SUMMARY"
           exit 0
         fi
-        # Onde esta (URL do comentario), nunca o valor.
+        # Onde esta (URL do comentario), nunca o valor. Vai para o resumo E para o
+        # log: o resumo do job nao e legivel pela API, o log e.
         {
           echo "### Comentarios — Gitleaks: $total ocorrencia(s)"
           echo ""
@@ -159,7 +160,7 @@ runs:
             .[] | (.File | split("/") | last) as $f | select($f != "index.json")
             | ($idx[0][$f] // {}) as $m
             | "| \(.RuleID) | \($m.url // $f) | \($m.author // "-") | \(.StartLine) |"' "$report"
-        } >> "$GITHUB_STEP_SUMMARY"
+        } | tee -a "$GITHUB_STEP_SUMMARY"
         if [ "$FAIL_ON_FINDINGS" = "true" ]; then
           echo "::error::Gitleaks encontrou $total ocorrencia(s) em issues/PRs/comentarios. Detalhes no resumo do job."
         else
@@ -211,7 +212,7 @@ runs:
               ((.SourceMetadata.Data.Filesystem.file // "") | split("/") | last) as $f
               | ($idx[0][$f] // {}) as $m
               | "| \(.DetectorName // "?") | \(if .Verified == true then "ATIVO" elif (.VerificationError // "") != "" then "inconclusivo" else "nao verificado" end) | \($m.url // $f) | \($m.author // "-") |"' "$report"
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
         fi
         rm -f "$report"
         if [ "$unknown" -gt 0 ]; then
