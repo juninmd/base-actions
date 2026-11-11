@@ -912,6 +912,9 @@ tags = ["env", "secret", "juninmd"]
   regexTarget = "match"
   regexes = [
     '''(?i)(?:process\.env|os\.environ|settings\.|\$\{|<[^>]+>|%[A-Z_]+%)''',
+    # Valor inteiro e uma leitura de ambiente (env.X, Bun.env.X), nao um literal:
+    # `token: env.MY_APP_TOKEN || ''` fechava 20 chars e disparava a regra.
+    '''(?i)[:=]\s*["']?(?:bun\.)?env\.[A-Z_][A-Z0-9_]*["']?\s*$''',
     '''(?i)(?:example|exemplo|placeholder|changeme|change_me|dummy|sample|redacted|your[_-])''',
     '''(?i)(?:x{8,}|0{8,}|\*{6,})''',
     '''\(''',
