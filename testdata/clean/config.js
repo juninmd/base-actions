@@ -38,6 +38,10 @@ module.exports = {
   // campo de formulario chamado "local" — nao e hostname
   form: { local: 'Franca-SP' },
 
+  // token lido do ambiente (env injetado / Bun.env), nao e literal
+  mcp: { token: env.MY_ACADEMY_TOKEN || '' },
+  bun: { token: Bun.env.SERVICE_ACCESS_TOKEN || '' },
+
   // header sem token real
   authTemplate: 'Bearer <YOUR_TOKEN>',
 
