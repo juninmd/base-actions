@@ -130,7 +130,9 @@ runs:
           NODE_VER=$(tr -d 'v \n\r' < .nvmrc)
         elif [ -f ".node-version" ]; then
           NODE_VER=$(tr -d 'v \n\r' < .node-version)
-        elif [ -f "package.json" ]; then
+        elif [ -f "package.json" ] && [ -z "${NODE_VERSION_INPUT:-}" ]; then
+          # Node 10 (Angular 2/Ionic 3) e EOL e nao roda pnpm 10; so cai aqui
+          # quando o caller nao passou node-version explicitamente.
           if grep -q -E '"typescript":\s*"~2\.' package.json || grep -q -E '"@angular/core":\s*"4\.' package.json || grep -q -E '"@ionic/app-scripts"' package.json; then
             NODE_VER="10"
           fi
