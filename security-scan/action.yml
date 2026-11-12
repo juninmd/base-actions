@@ -213,7 +213,7 @@ runs:
 
         # Loga arquivo/regra de cada achado (sem o valor do segredo) para o
         # diagnostico aparecer no log do job, nao so no STEP_SUMMARY.
-        jq -r '.[] | "::error file=\(.File),line=\(.StartLine),title=Gitleaks \(.RuleID)::\(.RuleID) em \(.File):\(.StartLine) (commit \((.Commit // "")[0:8]))"' "$report" || true
+        jq -r '.[] | "::error file=\(.File),line=\(.StartLine),title=Gitleaks \(.RuleID)::\(.RuleID) em \(.File):\(.StartLine) fingerprint=\(.Fingerprint)"' "$report" || true
 
         # Nao encerra aqui: o TruffleHog ainda roda e o passo "Gate" decide. Um
         # PR com dois problemas mostra os dois de uma vez.
