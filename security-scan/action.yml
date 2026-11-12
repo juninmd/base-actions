@@ -211,6 +211,10 @@ runs:
           jq -r '.[] | "| \(.RuleID) | \(.File) | \(.StartLine) | \((.Commit // "")[0:8]) |"' "$report"
         } >> "$GITHUB_STEP_SUMMARY"
 
+        # Loga arquivo/regra de cada achado (sem o valor do segredo) para o
+        # diagnostico aparecer no log do job, nao so no STEP_SUMMARY.
+        jq -r '.[] | "::error file=\(.File),line=\(.StartLine),title=Gitleaks \(.RuleID)::\(.RuleID) em \(.File):\(.StartLine) (commit \((.Commit // "")[0:8]))"' "$report" || true
+
         # Nao encerra aqui: o TruffleHog ainda roda e o passo "Gate" decide. Um
         # PR com dois problemas mostra os dois de uma vez.
         if [ "$FAIL_ON_FINDINGS" = "true" ]; then
