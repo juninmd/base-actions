@@ -28,6 +28,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+      # BOT_MODE=guard: fleet_maintenance.py::guard_prs faz o request-changes (comentario como
+      # fallback) e a conversao para draft via GraphQL; so toca repo sem base-actions.
       - name: Guard PRs
         env:
           GH_TOKEN: ${{ secrets.FLEET_TOKEN }}

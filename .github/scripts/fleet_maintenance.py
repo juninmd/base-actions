@@ -262,7 +262,7 @@ def main() -> int:
     print(report)
     if not DRY_RUN and not GUARD_ONLY:
         upsert_issue(report)
-    return 1 if errors and len(errors) == len(rows) + len(errors) else 0
+    return 1 if errors else 0  # erro parcial tambem derruba o job: falha escondida e pior que job vermelho
 
 
 if __name__ == "__main__":
