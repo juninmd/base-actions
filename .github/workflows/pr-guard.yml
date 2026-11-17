@@ -1,0 +1,36 @@
+name: PR guard (require base-actions)
+
+# Repo sem nenhum uso de juninmd/base-actions nao tem workflow proprio que consiga
+# barrar o PR, entao a guarda e central: a cada 30 min, PR aberto (nao-draft) em repo
+# sem base-actions recebe "request changes" e vira draft.
+on:
+  schedule:
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Apenas relatar, sem escrever'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-guard
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Guard PRs
+        env:
+          GH_TOKEN: ${{ secrets.FLEET_TOKEN }}
+          BOT_MODE: guard
+          BOT_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+        run: python3 .github/scripts/fleet_maintenance.py

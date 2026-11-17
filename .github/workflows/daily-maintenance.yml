@@ -1,0 +1,47 @@
+name: Daily fleet maintenance
+
+# Roda todo dia as 04:00 America/Sao_Paulo (07:00 UTC). Um unico job central varre
+# os repos publicos do owner: relata pipelines vermelhas (billing x infra x codigo),
+# reexecuta falha de infra, aponta workflow lento/inseguro e abre PR trocando pin de
+# base-actions por @main. Repos nao precisam de cron proprio.
+#
+# Secret obrigatorio: FLEET_TOKEN (PAT fine-grained; Contents, Pull requests,
+# Actions e Issues: read/write; Workflows: read/write; Metadata: read).
+on:
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Apenas relatar, sem escrever'
+        type: boolean
+        default: true
+      repository:
+        description: 'Restringir a um repo (owner/nome); vazio = todos'
+        type: string
+        required: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: daily-maintenance
+  cancel-in-progress: false
+
+jobs:
+  maintain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Maintain fleet
+        env:
+          GH_TOKEN: ${{ secrets.FLEET_TOKEN }}
+          BOT_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+          BOT_REPOSITORY: ${{ inputs.repository }}
+        run: |
+          python3 -m py_compile .github/scripts/fleet_audit.py .github/scripts/fleet_maintenance.py
+          python3 .github/scripts/fleet_maintenance.py

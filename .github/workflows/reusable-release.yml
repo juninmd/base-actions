@@ -8,6 +8,11 @@ on:
         required: false
         type: string
         default: 'main'
+      versioning:
+        description: "'date' (padrao, vYYYY.MM.DD-sha) ou 'semver' (vX.Y.Z a partir de Conventional Commits)"
+        required: false
+        type: string
+        default: 'date'
       generate-release:
         description: 'Whether to generate a GitHub release'
         required: false
@@ -45,9 +50,24 @@ jobs:
 
       - name: Tag generation
         id: tagger
+        env:
+          VERSIONING: ${{ inputs.versioning }}
         run: |
-          # Simple tag generation based on date and commit hash
-          TAG_NAME="v$(date +'%Y.%m.%d')-$(git rev-parse --short HEAD)"
+          set -euo pipefail
+          if [ "$VERSIONING" = "semver" ]; then
+            # Bump pelo maior tipo desde a ultima tag vX.Y.Z: BREAKING/! = major, feat = minor, resto = patch.
+            last=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 || true)
+            range=${last:+$last..}HEAD
+            subjects=$(git log "$range" --format='%s%n%b')
+            IFS=. read -r maj min pat <<< "${last#v}"
+            maj=${maj:-0}; min=${min:-0}; pat=${pat:-0}
+            if echo "$subjects" | grep -qE '^[a-z]+(\([^)]*\))?!:|^BREAKING CHANGE'; then maj=$((maj+1)); min=0; pat=0
+            elif echo "$subjects" | grep -qE '^feat(\([^)]*\))?:'; then min=$((min+1)); pat=0
+            else pat=$((pat+1)); fi
+            TAG_NAME="v${maj}.${min}.${pat}"
+          else
+            TAG_NAME="v$(date +'%Y.%m.%d')-$(git rev-parse --short HEAD)"
+          fi
           echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
           git tag "$TAG_NAME"
           git push origin "$TAG_NAME"
