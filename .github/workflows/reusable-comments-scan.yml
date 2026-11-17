@@ -56,6 +56,10 @@ on:
 # Sem `concurrency` e sem `secrets:` de proposito (mesmos motivos do
 # reusable-validate / reusable-security-scan).
 
+concurrency:
+  group: ba-comments-scan-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   scan:
     # So leitura. O caller precisa conceder as tres: um workflow chamado nao pode
