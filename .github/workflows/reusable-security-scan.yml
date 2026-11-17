@@ -35,6 +35,10 @@ on:
 # repositorio que chamar este workflow. A action usa github.token, que ja chega
 # sozinho.
 
+concurrency:
+  group: ba-security-scan-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   scan:
     permissions:

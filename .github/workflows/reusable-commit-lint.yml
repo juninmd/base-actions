@@ -4,6 +4,10 @@ on:
   workflow_call:
 
 # contents: read cabe em qualquer teto de caller (inclusive token read-only).
+concurrency:
+  group: ba-commit-lint-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   commit-lint:
     runs-on: ubuntu-latest
