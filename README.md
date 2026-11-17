@@ -145,6 +145,10 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
+Versionamento semantico opcional (`vX.Y.Z` a partir de Conventional Commits: `feat` = minor,
+`fix`/demais = patch, `!`/`BREAKING CHANGE` = major): passe `with: { versioning: semver }`.
+O padrao continua `vYYYY.MM.DD-sha`.
+
 ### 7. Release Drafter & Autolabeler
 Add this to `.github/workflows/release-drafter.yml`:
 
@@ -270,6 +274,19 @@ remove o valor do historico de edicoes do GitHub.
 Falso positivo confirmado (ou credencial ja revogada) entra no baseline pelo input
 `ignore`, com a chave que o proprio resumo do job mostra na coluna "Ignore"
 (ex. `ignore: issue-25:juninmd-hardcoded-password`).
+
+## 🤖 Automacao central da frota
+
+Workflows deste repo que agem em todos os repos publicos do owner (secret `FLEET_TOKEN`,
+PAT fine-grained: Contents, Pull requests, Actions, Issues, Workflows):
+
+| Workflow | Quando | O que faz |
+|---|---|---|
+| `daily-maintenance.yml` | 04:00 America/Sao_Paulo (`0 7 * * *` UTC) | Relata pipelines vermelhas (billing x infra x codigo), reexecuta falha de infra, aponta workflow lento, action sem SHA, sem `permissions`/`timeout`/`concurrency`, cron; abre PR trocando pin de base-actions por `@main`. Relatorio na issue `fleet-report` |
+| `pr-guard.yml` | a cada 30 min | PR aberto em repo **sem** uso de base-actions recebe *request changes* e vira draft |
+
+Ambos rodam em dry-run no `workflow_dispatch` (padrao). Regras testadas em
+`.github/scripts/test-fleet-audit.py`.
 
 ## 🛡️ Camadas de seguranca
 

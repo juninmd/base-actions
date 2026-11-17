@@ -77,6 +77,9 @@ jobs:
         run: python .github/scripts/test-comments-scan.py
 
       # Pina o gate de segredos do validate-pr: exceção de fixture e rejeição de .env/.pem/.key.
+      - name: Regras da manutencao diaria (fleet_audit)
+        run: python .github/scripts/test-fleet-audit.py
+
       - name: Regression do gate de segredos (validate-pr)
         run: python .github/scripts/test-validate-pr-secrets.py
 
