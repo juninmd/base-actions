@@ -45,3 +45,14 @@ jobs:
         run: |
           python3 -m py_compile .github/scripts/fleet_audit.py .github/scripts/fleet_maintenance.py
           python3 .github/scripts/fleet_maintenance.py
+      # Dependabot nao herda config: cada repo precisa do proprio arquivo. Este passo
+      # garante PR semanal + agrupado em toda a frota abrindo um PR por repo divergente.
+      - name: Standardize Dependabot configs
+        env:
+          GH_TOKEN: ${{ secrets.FLEET_TOKEN }}
+          BOT_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+          BOT_REPOSITORY: ${{ inputs.repository }}
+        run: |
+          pip install --quiet --disable-pip-version-check pyyaml
+          python3 -m py_compile .github/scripts/dependabot_config.py
+          python3 .github/scripts/dependabot_config.py
