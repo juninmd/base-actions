@@ -289,11 +289,11 @@ Ambos rodam em dry-run no `workflow_dispatch` (padrao). Regras testadas em
 `.github/scripts/test-fleet-audit.py`.
 
 A manutencao diaria tambem padroniza o `.github/dependabot.yml` de cada repo
-(`dependabot_config.py`): PR de dependencia semanal e agrupado por ecossistema,
-editando o YAML no lugar para preservar comentarios, cooldown, limites e grupos
-que o repo ja definiu. Repos com `ignore`/`allow`/`registries`/`target-branch`/
-`vendor` ficam intocados e aparecem no relatorio. Regras em
-`.github/scripts/test-dependabot-config.py`.
+(`dependabot_config.py`): PR de dependencia semanal, agrupado por ecossistema e
+com `cooldown` de 7 dias (release recem-publicado nao vira PR), editando o YAML
+no lugar para preservar comentarios, limites e grupos que o repo ja definiu.
+Repos com `ignore`/`allow`/`registries`/`target-branch`/`vendor` ficam intocados e
+aparecem no relatorio. Regras em `.github/scripts/test-dependabot-config.py`.
 
 ## 🛡️ Camadas de seguranca
 

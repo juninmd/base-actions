@@ -7,11 +7,13 @@ politica -- editando o YAML no lugar, para preservar comentarios e o estilo de
 cada repo:
 
 - `schedule.interval: weekly` -- PR de dependencia so 1x por semana;
-- `groups` com catch-all por ecossistema -- 1 PR por ecossistema, nao 20.
+- `groups` com catch-all por ecossistema -- 1 PR por ecossistema, nao 20;
+- `cooldown.default-days: 7` -- release publicado ha menos de 7 dias nao vira PR
+  (janela em que tag movida / conta comprometida costuma ser revertida).
 
-O resto do arquivo (cooldown, limite de PRs, prefixo de commit, grupos proprios,
-comentarios) e preservado como esta: a politica so impoe o que o Dependabot nao
-tem como herdar de outro repo.
+O resto do arquivo (limite de PRs, prefixo de commit, grupos proprios, cooldown
+ja configurado, comentarios) e preservado como esta: a politica so impoe o que o
+Dependabot nao tem como herdar de outro repo.
 
 Abre um PR por repo que divergir (branch `chore/dependabot-weekly`). Repo com
 customizacao que o script nao sabe preservar (ignore/allow/registries/
@@ -29,6 +31,7 @@ import re
 import sys
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 
 import yaml
 
@@ -165,6 +168,11 @@ def normalize_entry(lines: list[str], start: int, eco: str) -> list[str]:
             f"{pad}groups:\n", f"{pad}  {group_name(eco)}:\n", f"{pad}    patterns: ['*']\n",
         ])
         changed.append("groups=catch-all")
+
+    end = block_end(lines, start)
+    if find_key(lines, start, end, "cooldown", child) < 0:
+        insert_after(lines, end - 1, [f"{pad}cooldown:\n", f"{pad}  default-days: 7\n"])
+        changed.append("cooldown=7d")
     return changed
 
 
@@ -225,6 +233,9 @@ def normalize_doc(doc: dict, text: str) -> tuple[str, dict[str, list[str]], list
         if not entry.get("groups"):
             entry["groups"] = {group_name(entry["package-ecosystem"]): {"patterns": ["*"]}}
             changed.append("groups=catch-all")
+        if not entry.get("cooldown"):
+            entry["cooldown"] = {"default-days": 7}
+            changed.append("cooldown=7d")
         if changed:
             changes.setdefault(entry["package-ecosystem"], []).extend(changed)
     if not changes:
@@ -242,7 +253,7 @@ def verify(doc: dict) -> bool:
     for entry in doc["updates"]:
         if (entry.get("schedule") or {}).get("interval") != "weekly":
             return False
-        if not entry.get("groups"):
+        if not entry.get("groups") or not entry.get("cooldown"):
             return False
     return True
 
@@ -250,6 +261,22 @@ def verify(doc: dict) -> bool:
 def read_config(repo: str, ref: str) -> str | None:
     blob = get_or_none(f"/repos/{repo}/contents/{CONFIG_PATH}?ref={ref}")
     return None if blob is None else base64.b64decode(blob["content"]).decode("utf-8")
+
+
+def update_pr(repo: str, pr: dict, text: str, changes: dict[str, list[str]]) -> str:
+    current = call("GET", f"/repos/{repo}/contents/{CONFIG_PATH}?ref={BRANCH}")
+    call("PUT", f"/repos/{repo}/contents/{CONFIG_PATH}", {
+        "message": TITLE, "content": base64.b64encode(text.encode()).decode(),
+        "sha": current["sha"], "branch": BRANCH,
+    })
+    call("PATCH", f"/repos/{repo}/issues/{pr['number']}", {
+        "body": (f"Politica da frota para Dependabot: **1 PR por semana**, **agrupado por "
+                 f"ecossistema**, **cooldown de 7 dias**.\n\nAtualizado em "
+                 f"{datetime.now(timezone.utc).strftime('%Y-%m-%d')} pela manutencao diaria "
+                 "(`daily-maintenance.yml`). Comentarios e configuracoes proprias do repo "
+                 "foram preservados."),
+    })
+    return f"{repo}: PR #{pr['number']} atualizado"
 
 
 def open_pr(repo: str, info: dict, text: str, changes: dict[str, list[str]]) -> str:
@@ -295,8 +322,16 @@ def main() -> int:
                 continue
             if not changes or new_text == text:
                 continue
+            owner = info["owner"]["login"]
+            open_prs = get_or_none(f"/repos/{repo}/pulls?state=open&head={owner}:{BRANCH}") or []
+            if open_prs:
+                if DRY_RUN:
+                    actions.append(f"{repo}: atualizaria PR #{open_prs[0]['number']}")
+                else:
+                    actions.append(update_pr(repo, open_prs[0], new_text, changes))
+                continue
             if get_or_none(f"/repos/{repo}/branches/{BRANCH}"):
-                skipped.append(f"{repo}: branch {BRANCH} ja existe")
+                skipped.append(f"{repo}: branch {BRANCH} sem PR aberto")
                 continue
             if DRY_RUN:
                 actions.append(f"{repo}: " + ", ".join(f"{e}={len(c)}" for e, c in changes.items()))

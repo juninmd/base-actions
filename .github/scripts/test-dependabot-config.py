@@ -45,7 +45,7 @@ check("comentario preservado", "# comentario do repo que precisa sobreviver" in 
 check("indentacao do repo preservada", text.splitlines()[3].startswith("  - package-ecosystem: npm"))
 check("politica nao mexe no que o repo escolheu",
       entries["npm"]["open-pull-requests-limit"] == 20 and entries["npm"]["commit-message"]["prefix"] == "deps")
-check("sem cooldown inventado", "cooldown" not in entries["npm"])
+check("cooldown de 7 dias", entries["npm"]["cooldown"] == {"default-days": 7})
 
 again, changes2, _ = d.normalize_text(text)
 check("idempotente", changes2 == {} and again == text)
@@ -66,7 +66,21 @@ cdoc = yaml.safe_load(ctext)
 check("grupo customizado preservado", cdoc["updates"][0]["groups"] == {"react": {"patterns": ["react*"]}})
 check("limite proprio preservado", cdoc["updates"][0]["open-pull-requests-limit"] == 3)
 check("interval inline corrigido", cdoc["updates"][0]["schedule"] == {"interval": "weekly"})
-check("grupo customizado nao conta como mudanca", cchanges == {"npm": ["schedule=weekly"]})
+check("grupo customizado nao conta como mudanca", cchanges == {"npm": ["schedule=weekly", "cooldown=7d"]})
+
+# cooldown proprio do repo (outra janela) fica como esta
+OWN_COOLDOWN = """version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+"""
+otext, ochanges, _ = d.normalize_text(OWN_COOLDOWN)
+check("cooldown proprio preservado", yaml.safe_load(otext)["updates"][0]["cooldown"] == {"default-days": 3})
+check("cooldown proprio nao entra nas mudancas", not any("cooldown" in c for c in ochanges.get("npm", [])))
 
 # decisao do repo (ignore/allow/registries/target-branch/vendor) bloqueia sem alterar texto
 for key, value in (("ignore", [{"dependency-name": "x"}]), ("registries", ["*"]),
