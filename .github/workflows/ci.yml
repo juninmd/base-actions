@@ -80,6 +80,12 @@ jobs:
       - name: Regras da manutencao diaria (fleet_audit)
         run: python .github/scripts/test-fleet-audit.py
 
+      # Politica de Dependabot (semanal + agrupado) que a frota inteira herda por PR.
+      - name: Regras do Dependabot da frota
+        run: |
+          pip install --quiet pyyaml
+          python .github/scripts/test-dependabot-config.py
+
       - name: Regression do gate de segredos (validate-pr)
         run: python .github/scripts/test-validate-pr-secrets.py
 
