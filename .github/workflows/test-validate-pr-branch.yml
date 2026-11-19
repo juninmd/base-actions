@@ -11,6 +11,7 @@ on:
 
 jobs:
   local:
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: read
@@ -26,6 +27,7 @@ jobs:
   # gitleaks e podia ignorar ou rejeitar --log-opts. Roda a action pelo caminho
   # local, entao testa a versao desta branch e nao a que ja esta em main.
   scan-incremental:
+    timeout-minutes: 15
     permissions:
       contents: read
     runs-on: ubuntu-latest
