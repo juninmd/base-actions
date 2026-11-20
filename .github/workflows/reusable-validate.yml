@@ -55,14 +55,12 @@ on:
           Ligue apenas se o repositorio tem dependencia `git+https://github.com/...`
           privada que precisa da credencial durante o install.
 
-# Sem `concurrency` aqui de proposito. Num workflow chamado, `github.workflow` e o
-# nome do workflow do CHAMADOR, entao dois jobs do mesmo caller invocando este
-# reusable cairiam no mesmo grupo e um cancelaria o outro -- o cancelado reporta
-# `cancelled` e trava o merge como required check, sem log explicando nada.
-# Politica de concorrencia e do caller.
+# Num workflow chamado, `github.workflow` e o do CHAMADOR: o grupo inclui as
+# entradas que distinguem as pernas de uma matrix (python/node/test-script), senao
+# uma perna cancela a outra e o required check fica `cancelled` sem log.
 
 concurrency:
-  group: ba-validate-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}
+  group: ba-validate-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.python-version }}-${{ inputs.node-version }}-${{ inputs.test-script }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
