@@ -134,17 +134,35 @@ def refresh_pr(repo: str, number: int):
     return pr
 
 
+def list_check_runs(repo: str, sha: str):
+    """Todas as paginas de check-runs; None se nao fechar com total_count (falha fechada)."""
+    runs: list = []
+    total = 0
+    for page in range(1, 11):
+        data = api(f"repos/{repo}/commits/{sha}/check-runs?per_page=100&page={page}") or {}
+        total = data.get("total_count") or 0
+        batch = data.get("check_runs") or []
+        runs.extend(batch)
+        if not batch or len(runs) >= total:
+            break
+    ids = {run.get("id") for run in runs}
+    return runs if len(ids) == len(runs) == total else None
+
+
 def billing_only(pr: dict) -> bool:
     """True somente se o unico motivo de falha for billing/spending limit."""
     repo = pr["base"]["repo"]["full_name"]
     sha = pr["head"]["sha"]
-    data = api(f"repos/{repo}/commits/{sha}/check-runs?per_page=100")
-    if not data or not data.get("total_count"):
+    runs = list_check_runs(repo, sha)
+    if runs is None:
+        log(f"    {repo}#{pr['number']}: lista de check-runs incompleta; sem merge")
+        return False
+    if not runs:
         log(f"    {repo}#{pr['number']}: sem check-runs no commit; sem evidencia de billing")
         return False
 
     billing = False
-    for run in data.get("check_runs", []):
+    for run in runs:
         if run.get("status") != "completed":
             log(f"    {repo}#{pr['number']}: check '{run.get('name')}' ainda {run.get('status')}")
             return False

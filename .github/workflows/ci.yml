@@ -80,6 +80,10 @@ jobs:
       - name: Regras da manutencao diaria (fleet_audit)
         run: python .github/scripts/test-fleet-audit.py
 
+      # billing_only lê todas as páginas de check-runs: uma falha real na página 2 bloqueia o merge.
+      - name: Regression do auto-merge por billing
+        run: python .github/scripts/test-auto-merge-billing.py
+
       - name: Regression do gate de segredos (validate-pr)
         run: python .github/scripts/test-validate-pr-secrets.py
 
