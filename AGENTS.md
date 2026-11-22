@@ -1,7 +1,16 @@
 # AGENTS.md - Base Actions
 
-## Overview
 Central repository for standardized GitHub Actions composite actions and reusable workflows across all @juninmd projects.
+
+## Stack
+- Composite actions and reusable workflows in YAML (`action.yml`, `.github/workflows/`).
+- Python scripts in `.github/scripts/` (PyYAML) and `testdata/`.
+- Lint and scanner tools: actionlint, shellcheck, zizmor, gitleaks, TruffleHog, Trivy, Semgrep.
+
+## Commands
+- Lint (same gates as the CI `lint` job): `make lint`
+- Script tests: `python .github/scripts/test-validate-pr-secrets.py`, `python .github/scripts/test-comments-scan.py`, `python .github/scripts/test-auto-merge-billing.py`
+- Gitleaks config contract: `python testdata/assert.py gitleaks`
 
 ## Available Actions
 - **validate-pr** - Tech-agnostic PR validation (Node/pnpm, Python/uv)
@@ -49,7 +58,7 @@ sast/            # SAST composite action (TruffleHog + Trivy + Semgrep + zizmor)
 ## Usage
 Reference in workflows with `uses: juninmd/base-actions/<action>@main`
 
-## Regras deste repo
+## Conventions
 - Consumido por 140+ repos via `@main`: commit quebrado aqui = pipeline quebrado em todos.
 - Antes de qualquer commit: `make lint` (= `actionlint` + `CI=1 python .github/scripts/lint-actions.py`
   + `shellcheck scripts/*.sh` + `zizmor` + regressao do comments-scan; requer `actionlint`,
