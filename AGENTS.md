@@ -55,7 +55,7 @@ Reference in workflows with `uses: juninmd/base-actions/<action>@main`
   + `shellcheck scripts/*.sh` + `zizmor` + regressao do comments-scan; requer `actionlint`,
   `shellcheck` e `pip install pyyaml zizmor`).
 - Testes locais: `python .github/scripts/test-validate-pr-secrets.py`,
-  `python .github/scripts/test-comments-scan.py` e
+  `python .github/scripts/test-comments-scan.py`, `python .github/scripts/test-auto-merge-billing.py` e
   `python testdata/assert.py gitleaks` (contrato do `gitleaks.toml`).
 - Bump de versao de gitleaks/trufflehog/trivy: troque o default em TODAS as actions/reusables
   e adicione o sha256 (tarball e binario, X64 e ARM64) em `scripts/install-tool.sh` — o linter
